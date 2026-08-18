@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Theo dõi HSBA BV HNĐK NGHỆ AN - GĐ2</title>
+  
+  <meta name="description" content="Hệ thống rà soát hồ sơ bệnh án, báo cáo và chốt ra viện 4 khâu chuyên môn - BV Hữu Nghị Đa Khoa Nghệ An - Giai đoạn 2." />
+  <meta name="theme-color" content="#0F766E" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2224%22 fill=%22%230F766E%22/><path d=%22M50 24 v52 M24 50 h52%22 stroke=%22white%22 stroke-width=%2212%22 stroke-linecap=%22round%22/></svg>">
+
+  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono (Modern, Youthful, Ultra-Legible) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Supabase JS Client (Official CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Core Design System CSS -->
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- ==================== 1. LOGIN SCREEN (HIỂN THỊ KHI CHƯA ĐĂNG NHẬP) ==================== -->
+  <div id="login-screen-view" class="login-overlay-container" style="display: none;">
+    <div class="login-card-wrapper">
+      
+      <!-- Brand Header in Login -->
+      <div class="login-brand-header">
+        <div class="login-logo-box">
+          <svg viewBox="0 0 24 24" fill="none" class="brand-svg-lg">
+            <rect width="24" height="24" rx="7" fill="#0F766E"/>
+            <path d="M12 6V18M6 12H18" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h1 class="login-app-title">Theo dõi HSBA</h1>
+        <p class="login-app-subtitle">BV HNĐK NGHỆ AN - GIAI ĐOẠN 2</p>
+      </div>
+
+      <!-- Main Login Form -->
+      <form id="form-login-auth" class="login-main-form">
+        <div class="login-field-group">
+          <label class="login-field-label" for="login-username">Tài khoản / Số điện thoại / Username:</label>
+          <div class="login-input-wrap">
+            <svg class="login-input-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>
+            <input type="text" id="login-username" class="login-input-control" placeholder="admin, duoc, ketoan, khth, it, mai_noi..." required autofocus />
+          </div>
+        </div>
+
+        <div class="login-field-group">
+          <label class="login-field-label" for="login-password">Mật khẩu:</label>
+          <div class="login-input-wrap">
+            <svg class="login-input-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>
+            <input type="password" id="login-password" class="login-input-control" placeholder="Mặc định: 123 (hoặc admin123)" required />
+          </div>
+        </div>
+
+        <div class="login-error-banner" id="login-error-msg" style="display: none;"></div>
+
+        <button type="submit" class="btn btn-primary btn-login-submit" id="btn-submit-login">
+          <span>Đăng Nhập Vào Hệ Thống ➔</span>
+        </button>
+      </form>
+
+      <!-- Quick 1-Click Role Login Demo Section -->
+      <div class="quick-login-section">
+        <div class="quick-login-divider">
+          <span>Hoặc đăng nhập nhanh theo vai trò</span>
+        </div>
+
+        <div class="quick-role-cards-grid" id="quick-role-cards-container">
+          <!-- Rendered by JS: 8 Demo personnel accounts -->
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== 2. MAIN APPLICATION WORKSPACE (HIỂN THỊ KHI ĐÃ ĐĂNG NHẬP) ==================== -->
+  <div id="app-main-workspace" class="app-layout">
+
+    <!-- 1. TOP HEADER (BRAND, NAVIGATION, USER PROFILE & ACTION) -->
+    <header class="app-top-header">
+      <div class="header-container">
+        
+        <!-- Left: Brand Identity -->
+        <div class="brand-group">
+          <div class="brand-logo-badge">
+            <svg viewBox="0 0 24 24" fill="none" class="brand-svg">
+              <rect width="24" height="24" rx="7" fill="#0F766E"/>
+              <path d="M12 6V18M6 12H18" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="brand-title-wrap">
+            <div class="brand-name-row">
+              <span class="brand-main-title">Theo dõi HSBA</span>
+              <span class="brand-version-tag">GĐ2</span>
+            </div>
+            <span class="brand-sub-title" id="header-hospital-subtitle">BV HNĐK NGHỆ AN</span>
+          </div>
+        </div>
+
+        <!-- Center: Primary Navigation Tabs (Pill Segmented Style) -->
+        <nav class="main-nav-bar" aria-label="Menu chức năng">
+          <button class="nav-tab-btn nav-active" data-tab="records">
+            <span class="nav-tab-icon">📋</span>
+            <span class="nav-tab-label">Danh sách lỗi</span>
+          </button>
+
+          <button class="nav-tab-btn" data-tab="discharge">
+            <span class="nav-tab-icon">📝</span>
+            <span class="nav-tab-label">Báo cáo & Chốt ra viện</span>
+          </button>
+
+          <button class="nav-tab-btn" data-tab="dashboard">
+            <span class="nav-tab-icon">📊</span>
+            <span class="nav-tab-label">Tổng quan Dashboard</span>
+          </button>
+
+          <button class="nav-tab-btn" data-tab="settings" id="nav-btn-settings">
+            <span class="nav-tab-icon">⚙️</span>
+            <span class="nav-tab-label">Cài đặt</span>
+          </button>
+        </nav>
+
+        <!-- Right: Logged-in User Profile Badge, Switch Dropdown & Actions -->
+        <div class="header-right-group">
+          
+          <!-- Cloud Database Status Pill -->
+          <div class="cloud-header-pill" id="header-cloud-status" title="Bấm để vào Cài đặt Cloud Supabase">
+            <span class="cloud-status-dot" id="header-cloud-dot"></span>
+            <span class="cloud-status-text" id="header-cloud-text">Cloud Sync</span>
+          </div>
+
+          <!-- User Profile Card -->
+          <div class="user-header-profile" id="user-header-profile-card">
+            <div class="user-profile-avatar" id="header-user-avatar">👨‍⚕️</div>
+            <div class="user-profile-meta">
+              <div class="user-profile-name-row">
+                <strong class="user-profile-name" id="header-user-name">Đang tải...</strong>
+                <span class="user-role-badge" id="header-user-role-pill">Vai trò</span>
+              </div>
+              <span class="user-profile-dept" id="header-user-dept">Khoa/Phòng</span>
+            </div>
+            
+            <!-- Quick Switch User Dropdown for convenience -->
+            <select id="header-switch-user-select" class="header-switch-select" title="Đổi nhanh người dùng">
+              <!-- Rendered by JS -->
+            </select>
+
+            <!-- Logout Button -->
+            <button class="btn-header-logout" id="btn-header-logout" title="Đăng xuất khỏi hệ thống">
+              <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd"/></svg>
+            </button>
+          </div>
+
+          <!-- Add Record Button -->
+          <button class="btn btn-primary btn-add-desktop" id="btn-open-add-modal">
+            <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+            <span>Báo cáo lỗi mới</span>
+          </button>
+        </div>
+
+      </div>
+    </header>
+
+    <!-- 2. MAIN CONTENT VIEWPORT (FULL-WIDTH EXPANSIVE CANVAS) -->
+    <main class="main-body-content">
+      <div class="app-container">
+
+        <!-- ==================== VIEW 1: DANH SÁCH LỖI (RECORDS) ==================== -->
+        <section id="view-records" class="view-section">
+          
+          <!-- Filter Toolbar Panel (Soft Rounded Card) -->
+          <div class="soft-card-panel filter-panel">
+            <div class="filter-top-row">
+              <div class="search-input-pill">
+                <svg class="search-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
+                <input type="text" id="search-input" class="search-field-control" placeholder="Tìm theo Mã KCB, Tên BN, Bác sĩ, Nội dung lỗi... (Enter để tìm toàn bộ)" />
+                <button class="btn-clear-icon" id="btn-clear-search" title="Xóa tìm kiếm">&times;</button>
+              </div>
+              <button class="btn btn-primary btn-sm btn-add-mobile" id="btn-open-add-modal-mobile">
+                <span>+ Báo cáo lỗi</span>
+              </button>
+            </div>
+
+            <!-- 5 Filter Inputs Grid -->
+            <div class="filter-grid-fields">
+              <div class="filter-field-unit">
+                <label class="field-label-caption">Khoa / Phòng:</label>
+                <input type="text" id="filter-dept-input" list="dl-khoa-phong" class="soft-form-control" placeholder="Tất cả các khoa..." />
+                <datalist id="dl-khoa-phong"></datalist>
+              </div>
+
+              <div class="filter-field-unit">
+                <label class="field-label-caption">Bác sĩ / Người ra YL:</label>
+                <input type="text" id="filter-staff-input" list="dl-nguoi-chi-dinh" class="soft-form-control" placeholder="Tất cả bác sĩ..." />
+                <datalist id="dl-nguoi-chi-dinh"></datalist>
+              </div>
+
+              <div class="filter-field-unit">
+                <label class="field-label-caption">Mức độ lỗi:</label>
+                <input type="text" id="filter-status-input" list="dl-trang-thai" class="soft-form-control" placeholder="Tất cả mức độ lỗi..." />
+                <datalist id="dl-trang-thai">
+                  <option value="Nhắc nhở">🟡 Nhắc nhở</option>
+                  <option value="Yêu cầu kiểm tra">🟣 Yêu cầu kiểm tra</option>
+                  <option value="Báo động">🚨 Báo động</option>
+                </datalist>
+              </div>
+
+              <div class="filter-field-unit">
+                <label class="field-label-caption">Kiểm từ ngày:</label>
+                <input type="date" id="filter-from-date" class="soft-form-control" />
+              </div>
+
+              <div class="filter-field-unit">
+                <label class="field-label-caption">Đến ngày:</label>
+                <input type="date" id="filter-to-date" class="soft-form-control" />
+              </div>
+            </div>
+
+            <!-- Filter Status & Action Strip -->
+            <div class="filter-bottom-bar">
+              <div class="filter-status-indicator">
+                <span class="indicator-dot-teal"></span>
+                <span>Đang hiển thị: </span>
+                <strong class="count-badge-pill" id="records-total-count">10 ngày gần đây</strong>
+                <span class="text-caption text-muted">(Lỗi chưa hoàn thành được ưu tiên lên đầu)</span>
+              </div>
+              <div class="filter-action-buttons">
+                <button class="btn btn-outline btn-sm" id="btn-export-excel" title="Xuất file CSV">
+                  <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                  <span>Xuất CSV</span>
+                </button>
+                <button class="btn btn-secondary btn-sm" id="btn-reset-filters" title="Đặt lại bộ lọc">
+                  <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
+                  <span>Đặt lại lọc</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Clinical Data Table (Full Width, Spacious, 8 Columns) -->
+          <div class="soft-card-panel table-panel desktop-table-wrapper">
+            <table class="clinical-data-table" id="records-table">
+              <thead>
+                <tr>
+                  <th style="width: 42px;" class="text-center">#</th>
+                  <th style="width: 185px;">Bệnh nhân & Mã KCB</th>
+                  <th style="width: 175px;">Khoa & Bác sĩ ra YL</th>
+                  <th style="width: 130px;" class="text-center">Thời gian YL</th>
+                  <th>Diễn giải lỗi & Ý kiến người sửa</th>
+                  <th style="width: 145px;" class="text-center">Mức độ lỗi</th>
+                  <th style="width: 135px;" class="text-center">Tiến độ sửa</th>
+                  <th style="width: 70px;" class="text-center">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="records-table-body">
+                <!-- Rendered by JS -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Mobile Cards List -->
+          <div class="mobile-cards-list" id="records-cards-container">
+            <!-- Rendered by JS -->
+          </div>
+
+          <!-- Pagination Footer -->
+          <div class="pagination-footer" id="records-pagination">
+            <!-- Rendered by JS -->
+          </div>
+        </section>
+
+        <!-- ==================== VIEW 2: BÁO CÁO VÀ CHỐT RA VIỆN ==================== -->
+        <section id="view-discharge" class="view-section" style="display: none;">
+          <div class="view-header-strip">
+            <h2 class="view-main-title">Báo Cáo và Chốt Ra Viện</h2>
+            <p class="view-sub-title">Khoa phòng báo cáo ca ra viện hàng ngày & 4 Khâu kiểm lỗi: Dược, Kế toán BH, KHTH, IT</p>
+          </div>
+
+          <!-- BATCH INLINE ENTRY PANEL (NHẬP NHANH NHIỀU CA CÙNG LÚC) -->
+          <div class="soft-card-panel batch-panel">
+            <div class="batch-header-strip">
+              <div class="batch-title-group">
+                <span class="batch-icon-badge">⚡</span>
+                <div>
+                  <h3 class="batch-title-text">Nhập nhanh danh sách ra viện trực tiếp (Nhiều ca cùng lúc):</h3>
+                  <p class="batch-desc-text">Phím <strong>Enter</strong> chuyển trường trong hàng; xong hàng bấm <strong>Enter</strong> tự tạo hàng mới</p>
+                </div>
+              </div>
+
+              <div class="batch-options-group">
+                <div class="batch-option-unit">
+                  <span class="batch-opt-label">Khoa báo cáo:</span>
+                  <select id="batch-active-dept" class="soft-form-control batch-select"></select>
+                </div>
+                <div class="batch-option-unit">
+                  <span class="batch-opt-label">Ngày:</span>
+                  <input type="date" id="batch-report-date" class="soft-form-control batch-date" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Batch Table (1 Initial Row by Default) -->
+            <div class="batch-table-container">
+              <table class="batch-grid-table">
+                <thead>
+                  <tr>
+                    <th style="width: 38px;" class="text-center">#</th>
+                    <th style="width: 220px;">1. Mã KCB *</th>
+                    <th style="width: 280px;">2. Tên Bệnh nhân *</th>
+                    <th style="width: 240px;">3. Tên Bác sĩ điều trị</th>
+                    <th style="width: 190px;">4. Khoa / Phòng</th>
+                    <th style="width: 44px;" class="text-center">Xóa</th>
+                  </tr>
+                </thead>
+                <tbody id="batch-input-rows">
+                  <!-- Rendered by JS -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Batch Action Footer -->
+            <div class="batch-footer-strip">
+              <div class="batch-footer-left">
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-add-batch-row">
+                  <span>+ Thêm dòng ca mới (Enter)</span>
+                </button>
+                <span class="batch-counter-label" id="batch-rows-count-label">Đã điền 0/1 ca</span>
+              </div>
+              <div class="batch-footer-right">
+                <button type="button" class="btn btn-primary" id="btn-save-batch-reports">
+                  <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                  <span>Lưu tất cả ca vừa nhập</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Refined Compact Filter & Search Toolbar for Discharge List -->
+          <div class="discharge-compact-toolbar">
+            <!-- 1. Segmented Date Navigation -->
+            <div class="discharge-date-segmented">
+              <button type="button" class="btn-date-nav" id="btn-discharge-prev-date" title="Ngày trước">
+                <svg viewBox="0 0 20 20" fill="currentColor" class="nav-svg"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              </button>
+              <div class="date-input-wrap">
+                <svg viewBox="0 0 20 20" fill="currentColor" class="cal-svg"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
+                <input type="date" id="discharge-date-filter" class="input-date-flat" title="Chọn ngày báo cáo" />
+              </div>
+              <button type="button" class="btn-date-nav" id="btn-discharge-next-date" title="Ngày sau">
+                <svg viewBox="0 0 20 20" fill="currentColor" class="nav-svg"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+              </button>
+              <button type="button" class="btn-today-pill" id="btn-discharge-today" title="Về ngày hôm nay">Hôm nay</button>
+            </div>
+
+            <!-- 2. Sleek Search Box -->
+            <div class="discharge-search-box">
+              <svg class="search-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
+              <input type="text" id="discharge-search-input" class="discharge-search-control" placeholder="Tìm theo Mã KCB, Tên BN, Bác sĩ..." autocomplete="off" />
+              <button class="btn-clear-icon" id="btn-clear-discharge-search" title="Xóa">&times;</button>
+            </div>
+
+            <!-- 3. Status Counter Badge with Live Indicator -->
+            <div class="discharge-counter-badge">
+              <span class="counter-live-dot"></span>
+              <span id="discharge-total-count">0 ca ra viện</span>
+            </div>
+          </div>
+
+          <!-- Discharge Table (4 Steps + Gate Pass Columns) -->
+          <div class="soft-card-panel table-panel desktop-table-wrapper">
+            <table class="clinical-data-table" id="discharge-table">
+              <thead>
+                <tr>
+                  <th style="width: 38px;" class="text-center">#</th>
+                  <th style="width: 105px;" class="text-center">Ngày BC</th>
+                  <th style="width: 180px;">Bệnh nhân & Mã KCB</th>
+                  <th style="width: 175px;">Bác sĩ & Khoa</th>
+                  <th style="width: 235px;">4 Khâu kiểm lỗi chuyên môn</th>
+                  <th>Báo cáo tình trạng sửa lỗi</th>
+                  <th style="width: 125px;" class="text-center">Chốt thông cổng</th>
+                  <th style="width: 65px;" class="text-center">Duyệt</th>
+                </tr>
+              </thead>
+              <tbody id="discharge-table-body">
+                <!-- Rendered by JS -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Mobile Cards -->
+          <div class="mobile-cards-list" id="discharge-cards-container">
+            <!-- Rendered by JS -->
+          </div>
+        </section>
+
+        <!-- ==================== VIEW 3: TỔNG QUAN DASHBOARD ==================== -->
+        <section id="view-dashboard" class="view-section" style="display: none;">
+          
+          <!-- Friendly Hero Greeting Box -->
+          <div class="dashboard-hero-box">
+            <div class="hero-text-side">
+              <h2 class="hero-title-text" id="dash-greeting-title">Chào buổi làm việc, Bác sĩ 👋</h2>
+              <p class="hero-sub-text">Theo dõi sát sao tiến độ sửa lỗi bệnh án, rà soát 4 khâu chuyên môn và chốt thông cổng ra viện hàng ngày.</p>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="btn-refresh-dashboard">
+              <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
+              <span>Làm mới số liệu</span>
+            </button>
+          </div>
+
+          <!-- 4 Soft KPI Metric Cards -->
+          <div class="soft-kpi-grid">
+            <div class="soft-kpi-card accent-teal">
+              <div class="kpi-icon-pill">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+              </div>
+              <div class="kpi-info-content">
+                <span class="kpi-label-caption">Tổng lỗi HSBA rà soát</span>
+                <h3 class="kpi-metric-number" id="dash-total-errors">0</h3>
+                <span class="kpi-footnote" id="dash-recent-10days">10 ngày gần đây</span>
+              </div>
+            </div>
+
+            <div class="soft-kpi-card accent-rose">
+              <div class="kpi-icon-pill">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+              </div>
+              <div class="kpi-info-content">
+                <span class="kpi-label-caption">Lỗi chưa khắc phục</span>
+                <h3 class="kpi-metric-number text-danger" id="dash-pending-errors">0</h3>
+                <span class="kpi-footnote text-danger font-medium" id="dash-urgent-count">0 lỗi khẩn cấp</span>
+              </div>
+            </div>
+
+            <div class="soft-kpi-card accent-emerald">
+              <div class="kpi-icon-pill">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+              </div>
+              <div class="kpi-info-content">
+                <span class="kpi-label-caption">Hồ sơ đã thông cổng</span>
+                <h3 class="kpi-metric-number text-success" id="dash-gate-passed">0</h3>
+                <span class="kpi-footnote text-success font-medium" id="dash-gate-ratio">0% ca ra viện</span>
+              </div>
+            </div>
+
+            <div class="soft-kpi-card accent-purple">
+              <div class="kpi-icon-pill">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/></svg>
+              </div>
+              <div class="kpi-info-content">
+                <span class="kpi-label-caption">Tin Zalo tự động</span>
+                <h3 class="kpi-metric-number text-purple" id="dash-zalo-sent">0</h3>
+                <span class="kpi-footnote">Chu kỳ 2 giờ / lần</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Two Detail Breakdown Panels -->
+          <div class="dashboard-details-grid">
+            <div class="soft-card-panel">
+              <div class="panel-header-strip">
+                <h4 class="panel-header-title">Tình hình 4 Khâu Kiểm Lỗi Ra Viện</h4>
+              </div>
+              <div class="panel-body-area" id="dash-steps-summary-container">
+                <!-- Rendered by JS -->
+              </div>
+            </div>
+
+            <div class="soft-card-panel">
+              <div class="panel-header-strip">
+                <h4 class="panel-header-title">Thống kê lỗi theo Khoa / Phòng</h4>
+              </div>
+              <div class="panel-body-area" id="dash-dept-stats-container">
+                <!-- Rendered by JS -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== VIEW 4: CÀI ĐẶT & PHÂN QUYỀN ==================== -->
+        <section id="view-settings" class="view-section" style="display: none;">
+          <div class="view-header-strip">
+            <h2 class="view-main-title">Cài Đặt & Cấu Hình Hệ Thống</h2>
+            <p class="view-sub-title">Quản trị phân quyền chuyên môn, cấu hình tin nhắn Zalo, danh mục khoa phòng, nhân sự và sao lưu dữ liệu</p>
+          </div>
+
+          <!-- Unauthorized Locked Screen (Chỉ Admin & IT có quyền) -->
+          <div id="settings-unauthorized-container" style="display: none;"></div>
+
+          <!-- Authorized Settings Area (Admin / IT) -->
+          <div id="settings-authorized-container">
+            <div class="subnav-pill-carousel">
+              <button class="subnav-pill-btn active" data-subtab="zalo">💬 Cấu hình Zalo</button>
+              <button class="subnav-pill-btn" data-subtab="permissions">🔒 Phân quyền Chỉnh sửa Cột</button>
+              <button class="subnav-pill-btn" data-subtab="departments">🏥 Danh mục Khoa/Phòng</button>
+              <button class="subnav-pill-btn" data-subtab="staff">👨‍⚕️ Profile Nhân viên</button>
+              <button class="subnav-pill-btn" data-subtab="supabase">☁️ Cloud Database (Supabase)</button>
+              <button class="subnav-pill-btn" data-subtab="backup">💾 Dữ liệu & Sao lưu</button>
+            </div>
+
+            <!-- Subtab 1: Zalo Config -->
+            <div id="settings-sec-zalo" class="settings-pane">
+              <div class="dashboard-details-grid">
+                <div class="soft-card-panel">
+                  <div class="panel-header-strip">
+                    <h4 class="panel-header-title text-primary">Cấu hình Tin nhắn Zalo Tự động</h4>
+                  </div>
+                  <div class="panel-body-area">
+                    <form id="form-zalo-config" class="form-vertical-flow">
+                      <div class="switch-field-row">
+                        <div>
+                          <strong class="switch-main-title">Bật tính năng gửi tin nhắn Zalo</strong>
+                          <span class="switch-sub-desc">Gửi thông báo cảnh báo trực tiếp đến Zalo người mắc lỗi</span>
+                        </div>
+                        <input type="checkbox" id="zalo-cfg-enabled" checked class="soft-checkbox" />
+                      </div>
+
+                      <div class="switch-field-row">
+                        <div>
+                          <strong class="switch-main-title">Tự động nhắc lại định kỳ</strong>
+                          <span class="switch-sub-desc">Tự động gửi tin nhắn nhắc nhở 2 giờ một lần</span>
+                        </div>
+                        <input type="checkbox" id="zalo-cfg-auto" checked class="soft-checkbox" />
+                      </div>
+
+                      <div class="form-unit-group">
+                        <label class="form-unit-label">Chu kỳ nhắc lại định kỳ (giờ):</label>
+                        <select id="zalo-cfg-interval" class="soft-form-control">
+                          <option value="1">1 giờ / lần</option>
+                          <option value="2" selected>2 giờ / lần (Mặc định)</option>
+                          <option value="3">3 giờ / lần</option>
+                          <option value="4">4 giờ / lần</option>
+                        </select>
+                      </div>
+
+                      <div class="form-unit-group">
+                        <label class="form-unit-label">Tên người gửi / Zalo Official Account:</label>
+                        <input type="text" id="zalo-cfg-oaname" class="soft-form-control" value="Tổ Rà Soát HSBA - Bệnh Viện" />
+                      </div>
+
+                      <div class="form-unit-group">
+                        <label class="form-unit-label">Zalo OA ID / Webhook (Tùy chọn kết nối API):</label>
+                        <input type="text" id="zalo-cfg-oaid" class="soft-form-control" placeholder="ZALO_OA_HSBA_2026" />
+                      </div>
+
+                      <div class="form-unit-group">
+                        <label class="form-unit-label">Mẫu tin nhắn Zalo gửi đi:</label>
+                        <textarea id="zalo-cfg-template" class="soft-form-control" style="height: 80px;"></textarea>
+                        <span class="form-unit-helper">Hỗ trợ các thẻ: {nguoiNhan}, {khoaPhong}, {tenBenhNhan}, {maKCB}, {thoiGianYL}, {mucDoCanhBao}, {dienGiaiLoi}, {trangThaiLoi}</span>
+                      </div>
+
+                      <div class="form-actions-row">
+                        <button type="submit" class="btn btn-zalo">
+                          <span>💾 Lưu cấu hình Zalo</span>
+                        </button>
+                        <button type="button" class="btn btn-outline" id="btn-trigger-batch-zalo">
+                          <span>⚡ Kích hoạt gửi nhắc ngay</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+
+                <div class="soft-card-panel">
+                  <div class="panel-header-strip">
+                    <h4 class="panel-header-title">Quy trình Gửi Thông Báo Tự Động</h4>
+                  </div>
+                  <div class="panel-body-area clinical-flow-guide">
+                    <div class="guide-item">
+                      <span class="guide-badge-num">1</span>
+                      <p><strong>Báo cáo lỗi:</strong> Hệ thống tự động gửi tin nhắn Zalo cảnh báo đầu tiên cho Bác sĩ mắc lỗi.</p>
+                    </div>
+                    <div class="guide-item">
+                      <span class="guide-badge-num">2</span>
+                      <p><strong>Nhắc lại 2 giờ/lần:</strong> Tự động nhắc nhở nếu lỗi vẫn ở trạng thái <code>CHƯA SỬA</code> hoặc <code>ĐÃ XEM - ĐANG SỬA</code>.</p>
+                    </div>
+                    <div class="guide-item">
+                      <span class="guide-badge-num">3</span>
+                      <p><strong>Tự động dừng:</strong> Khi lỗi chuyển sang <strong>ĐÃ XONG</strong> hoặc hồ sơ được <strong>Chốt thông cổng</strong>, hệ thống tự động dừng chu kỳ gửi tin.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Zalo Logs Table -->
+              <div class="soft-card-panel" style="margin-top: 1rem;">
+                <div class="panel-header-strip">
+                  <h4 class="panel-header-title">Nhật ký Tin nhắn Zalo đã Gửi</h4>
+                </div>
+                <div class="table-panel">
+                  <table class="clinical-data-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 40px;" class="text-center">#</th>
+                        <th style="width: 140px;">Thời gian</th>
+                        <th style="width: 200px;">Người nhận & Zalo/SĐT</th>
+                        <th style="width: 190px;">Bệnh nhân & Khoa</th>
+                        <th style="width: 120px;" class="text-center">Phân loại</th>
+                        <th>Nội dung tin nhắn</th>
+                      </tr>
+                    </thead>
+                    <tbody id="settings-zalo-logs-body"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Subtab 2: Permissions -->
+            <div id="settings-sec-permissions" class="settings-pane" style="display: none;">
+              <div class="soft-card-panel" style="margin-bottom: 1rem;">
+                <div class="panel-header-strip">
+                  <h4 class="panel-header-title">Quy chế Phân quyền Chuyên môn 4 Khâu & Chốt Ra Viện</h4>
+                </div>
+                <div class="panel-body-area">
+                  <div class="role-grid-boxes">
+                    <div class="role-box-card border-duoc">
+                      <strong>💊 Khoa Dược</strong>
+                      <p class="text-xs text-muted" style="margin-top: 4px;">Độc quyền duyệt: Khâu Dược (Thuốc, VTYT, Kháng sinh).</p>
+                    </div>
+                    <div class="role-box-card border-ketoan">
+                      <strong>💵 Kế toán BHYT</strong>
+                      <p class="text-xs text-muted" style="margin-top: 4px;">Độc quyền duyệt: Khâu Kế toán BH (Viện phí, Mức hưởng BHYT).</p>
+                    </div>
+                    <div class="role-box-card border-khth">
+                      <strong>📋 Kế hoạch Tổng hợp</strong>
+                      <p class="text-xs text-muted" style="margin-top: 4px;">Độc quyền duyệt: Khâu KHTH & Độc quyền Chốt thông cổng ra viện.</p>
+                    </div>
+                    <div class="role-box-card border-it">
+                      <strong>💻 Phòng CNTT</strong>
+                      <p class="text-xs text-muted" style="margin-top: 4px;">Độc quyền duyệt: Khâu IT & Cài đặt hệ thống.</p>
+                    </div>
+                    <div class="role-box-card border-nhom2">
+                      <strong>👨‍⚕️ Khoa / Bác sĩ</strong>
+                      <p class="text-xs text-muted" style="margin-top: 4px;">Báo cáo ca ra viện hàng ngày & Cập nhật giải trình sửa lỗi.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Permissions Matrix Table -->
+              <div class="soft-card-panel">
+                <div class="panel-header-strip flex-between">
+                  <div>
+                    <h4 class="panel-header-title">Ma trận Chi tiết Phân quyền Thao tác (Cho phép chỉnh sửa)</h4>
+                    <span class="text-caption text-muted">Quản trị viên có thể bật/tắt quyền cho từng vai trò và lưu cấu hình</span>
+                  </div>
+                  <div class="filter-action-buttons">
+                    <button class="btn btn-primary btn-sm" id="btn-save-permissions" title="Lưu toàn bộ thay đổi ma trận">
+                      <span>💾 Lưu ma trận</span>
+                    </button>
+                    <button class="btn btn-secondary btn-sm" id="btn-reset-permissions" title="Khôi phục ma trận gốc">
+                      <span>🔄 Khôi phục mặc định</span>
+                    </button>
+                  </div>
+                </div>
+                <div class="table-panel">
+                  <table class="clinical-data-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 38px;" class="text-center">STT</th>
+                        <th style="width: 240px;">Tác vụ / Chức năng</th>
+                        <th>Mô tả quy định</th>
+                        <th style="width: 90px;" class="text-center">💊 Dược</th>
+                        <th style="width: 90px;" class="text-center">💵 KT-BH</th>
+                        <th style="width: 90px;" class="text-center">📋 KHTH</th>
+                        <th style="width: 80px;" class="text-center">💻 IT</th>
+                        <th style="width: 100px;" class="text-center">🔍 Tổ RS</th>
+                        <th style="width: 100px;" class="text-center">👨‍⚕️ Khoa/BS</th>
+                      </tr>
+                    </thead>
+                    <tbody id="settings-permissions-table-body"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Subtab 3: Depts -->
+            <div id="settings-sec-departments" class="settings-pane" style="display: none;">
+              <div class="soft-card-panel">
+                <div class="panel-header-strip flex-between">
+                  <h4 class="panel-header-title">Danh sách Khoa / Phòng trực thuộc</h4>
+                  <button class="btn btn-primary btn-sm" id="btn-add-dept">+ Thêm Khoa/Phòng mới</button>
+                </div>
+                <div class="table-panel">
+                  <table class="clinical-data-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 45px;" class="text-center">STT</th>
+                        <th>Tên Khoa / Phòng</th>
+                        <th style="width: 140px;">Mã viết tắt</th>
+                        <th style="width: 130px;" class="text-center">Nhân sự</th>
+                        <th style="width: 130px;" class="text-center">Lỗi HSBA</th>
+                        <th style="width: 90px;" class="text-center">Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody id="settings-depts-table-body"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Subtab 4: Staff -->
+            <div id="settings-sec-staff" class="settings-pane" style="display: none;">
+              <div class="soft-card-panel">
+                <div class="panel-header-strip flex-between">
+                  <h4 class="panel-header-title">Danh sách Bác sĩ / Điều dưỡng & Tài khoản Zalo</h4>
+                  <button class="btn btn-primary btn-sm" id="btn-add-staff">+ Thêm Nhân viên mới</button>
+                </div>
+                <div class="table-panel">
+                  <table class="clinical-data-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 45px;" class="text-center">STT</th>
+                        <th>Họ và Tên Nhân viên</th>
+                        <th style="width: 190px;">Khoa / Phòng</th>
+                        <th style="width: 150px;">Chức danh</th>
+                        <th style="width: 120px;">Số ĐT</th>
+                        <th style="width: 130px;">Zalo ID</th>
+                        <th style="width: 150px;">Vai trò mặc định</th>
+                        <th style="width: 90px;" class="text-center">Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody id="settings-staff-table-body"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Subtab 5: Backup -->
+            <div id="settings-sec-backup" class="settings-pane" style="display: none;">
+              <div class="dashboard-details-grid">
+                <div class="soft-card-panel">
+                  <div class="panel-header-strip">
+                    <h4 class="panel-header-title">💾 Xuất file Sao lưu Toàn bộ</h4>
+                  </div>
+                  <div class="panel-body-area">
+                    <p class="text-body-sm text-muted">Tải toàn bộ cơ sở dữ liệu về máy dạng file JSON an toàn.</p>
+                    <button class="btn btn-primary" id="btn-export-backup" style="margin-top: 1rem;">
+                      <span>📥 Tải file Backup (.json)</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="soft-card-panel">
+                  <div class="panel-header-strip">
+                    <h4 class="panel-header-title">📂 Khôi phục từ file JSON</h4>
+                  </div>
+                  <div class="panel-body-area">
+                    <p class="text-body-sm text-muted">Phục hồi lại toàn bộ dữ liệu từ file sao lưu.</p>
+                    <label class="btn btn-outline" style="cursor: pointer; margin-top: 1rem; display: inline-flex;">
+                      <span>📤 Chọn file JSON</span>
+                      <input type="file" id="input-import-backup" accept=".json" style="display: none;" />
+                    </label>
+                  </div>
+                </div>
+
+                <div class="soft-card-panel border-danger-subtle">
+                  <div class="panel-header-strip">
+                    <h4 class="panel-header-title text-danger">⚠️ Đặt lại dữ liệu mẫu</h4>
+                  </div>
+                  <div class="panel-body-area">
+                    <p class="text-body-sm text-muted">Khôi phục lại danh sách Khoa phòng, Nhân viên và bản ghi mẫu ban đầu.</p>
+                    <button class="btn btn-danger-outline" id="btn-reset-defaults" style="margin-top: 1rem;">
+                      <span>🔄 Khôi phục dữ liệu mẫu</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Subtab 6: Supabase Cloud Database -->
+            <div id="settings-sec-supabase" class="settings-pane" style="display: none;">
+              <div class="dashboard-details-grid">
+                <div class="soft-card-panel">
+                  <div class="panel-header-strip flex-between">
+                    <h4 class="panel-header-title text-primary">⚡ Cấu hình Kết nối Supabase</h4>
+                    <span class="badge-tag" id="supabase-status-badge" style="background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;">
+                      <span class="badge-dot dot-info"></span>
+                      <span id="supabase-status-text">Đang kiểm tra kết nối...</span>
+                    </span>
+                  </div>
+                  <div class="panel-body-area">
+                    <form id="form-supabase-config" class="form-vertical-flow">
+                      <div class="form-unit-group">
+                        <label class="form-unit-label">Supabase Project URL:</label>
+                        <input type="text" id="supabase-cfg-url" class="soft-form-control font-mono" placeholder="https://your-project.supabase.co" value="https://fzmipvmubniicezkpzyj.supabase.co" required />
+                      </div>
+
+                      <div class="form-unit-group">
+                        <label class="form-unit-label">Supabase Publishable / Anon Key:</label>
+                        <input type="password" id="supabase-cfg-key" class="soft-form-control font-mono" placeholder="sb_publishable_..." value="sb_publishable_fLQ_49ZX62mA83LaaSWXFg_ED7LEu5o" required />
+                      </div>
+
+                      <div class="form-actions-row" style="margin-top: 14px;">
+                        <button type="submit" class="btn btn-primary">
+                          <span>💾 Lưu cấu hình & Kết nối</span>
+                        </button>
+                        <button type="button" class="btn btn-secondary" id="btn-test-supabase">
+                          <span>🔄 Kiểm tra kết nối</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+
+                <div class="soft-card-panel">
+                  <div class="panel-header-strip">
+                    <h4 class="panel-header-title">Đồng bộ Dữ liệu Cloud Realtime</h4>
+                  </div>
+                  <div class="panel-body-area">
+                    <p class="text-xs text-muted" style="line-height: 1.6; margin-bottom: 16px;">
+                      Dữ liệu được đồng bộ <strong>tự động 2 chiều theo thời gian thực (Realtime)</strong> giữa tất cả máy tính và điện thoại của bác sĩ/nhân viên:
+                    </p>
+
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                      <button type="button" class="btn btn-outline" id="btn-push-supabase" style="justify-content: flex-start; padding: 10px 14px; height: auto;">
+                        <div>
+                          <strong style="display: block; color: var(--teal-800);">☁️ Đẩy toàn bộ dữ liệu trên máy lên Cloud</strong>
+                          <span class="text-xs text-muted">Đẩy danh mục Khoa, Nhân viên, Lỗi HSBA và Ca ra viện lên Supabase</span>
+                        </div>
+                      </button>
+
+                      <button type="button" class="btn btn-outline" id="btn-pull-supabase" style="justify-content: flex-start; padding: 10px 14px; height: auto;">
+                        <div>
+                          <strong style="display: block; color: var(--teal-800);">📥 Tải dữ liệu mới nhất từ Cloud về máy</strong>
+                          <span class="text-xs text-muted">Lấy toàn bộ dữ liệu đang lưu trên Supabase Cloud về trình duyệt</span>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+  </div>
+
+  <!-- ==================== MOBILE FLOATING ACTION BUTTON ==================== -->
+  <button class="btn-mobile-fab" id="btn-add-mobile-fab" title="Thêm lỗi HSBA mới">
+    <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+  </button>
+
+  <!-- ==================== MOBILE BOTTOM NAVIGATION ==================== -->
+  <nav class="mobile-bottom-nav" aria-label="Điều hướng di động">
+    <div class="mobile-nav-grid">
+      <button class="mob-nav-item nav-active" data-tab="records">
+        <svg class="mob-nav-svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/></svg>
+        <span>Rà soát lỗi</span>
+      </button>
+      <button class="mob-nav-item" data-tab="discharge">
+        <svg class="mob-nav-svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd"/></svg>
+        <span>Ra viện</span>
+      </button>
+      <button class="mob-nav-item" data-tab="dashboard">
+        <svg class="mob-nav-svg" viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+        <span>Tổng quan</span>
+      </button>
+      <button class="mob-nav-item" data-tab="settings" id="mob-nav-btn-settings">
+        <svg class="mob-nav-svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+        <span>Cài đặt</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ==================== MODAL DIALOG CONTAINER ==================== -->
+  <div id="modal-root"></div>
+
+  <!-- JavaScript Modules -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
