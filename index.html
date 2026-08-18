@@ -224,9 +224,19 @@
             <div class="filter-bottom-bar">
               <div class="filter-status-indicator">
                 <span class="indicator-dot-teal"></span>
-                <span>Đang hiển thị: </span>
-                <strong class="count-badge-pill" id="records-total-count">10 ngày gần đây</strong>
-                <span class="text-caption text-muted">(Lỗi chưa hoàn thành được ưu tiên lên đầu)</span>
+                <span>Thời gian:</span>
+                <select id="filter-recent-days-select" class="recent-days-select" title="Chọn khoảng thời gian hiển thị danh sách lỗi">
+                  <option value="3">3 ngày gần đây</option>
+                  <option value="7">7 ngày gần đây</option>
+                  <option value="10" selected>10 ngày gần đây</option>
+                  <option value="15">15 ngày gần đây</option>
+                  <option value="30">30 ngày gần đây</option>
+                  <option value="60">60 ngày gần đây</option>
+                  <option value="90">90 ngày gần đây</option>
+                  <option value="all">Toàn bộ thời gian (Tất cả)</option>
+                </select>
+                <strong class="count-badge-pill" id="records-total-count">0 lỗi</strong>
+                <span class="text-caption text-muted">(Lỗi chưa hoàn thành ưu tiên lên đầu)</span>
               </div>
               <div class="filter-action-buttons">
                 <button class="btn btn-outline btn-sm" id="btn-export-excel" title="Xuất file CSV">
