@@ -318,6 +318,10 @@ class App {
     if (btnAddErrorMobile) {
       btnAddErrorMobile.onclick = () => this.modalController.openAddErrorModal();
     }
+    const btnOpenAddModalMobile = document.getElementById('btn-open-add-modal-mobile');
+    if (btnOpenAddModalMobile) {
+      btnOpenAddModalMobile.onclick = () => this.modalController.openAddErrorModal();
+    }
 
     const searchInput = document.getElementById('search-input');
     if (searchInput) {
@@ -417,9 +421,13 @@ class App {
 
     const btnToggleFilterMobile = document.getElementById('btn-toggle-filter-mobile');
     const filterContainer = document.getElementById('filter-section');
+    const filterToggleLabel = document.getElementById('btn-toggle-filter-label');
     if (btnToggleFilterMobile && filterContainer) {
       btnToggleFilterMobile.onclick = () => {
-        filterContainer.classList.toggle('filter-open-mobile');
+        const isOpen = filterContainer.classList.toggle('filter-open-mobile');
+        if (filterToggleLabel) {
+          filterToggleLabel.textContent = isOpen ? 'Thu gọn' : 'Bộ lọc';
+        }
       };
     }
 
@@ -427,6 +435,22 @@ class App {
     const btnAddDischargeReport = document.getElementById('btn-open-add-discharge-report');
     if (btnAddDischargeReport) {
       btnAddDischargeReport.onclick = () => this.modalController.openAddDischargeReportModal();
+    }
+    const btnAddDischargeModalMobile = document.getElementById('btn-open-add-discharge-modal-mobile');
+    if (btnAddDischargeModalMobile) {
+      btnAddDischargeModalMobile.onclick = () => this.modalController.openAddDischargeReportModal();
+    }
+
+    const btnToggleBatchMobile = document.getElementById('btn-toggle-batch-mobile');
+    const batchPanel = document.getElementById('batch-discharge-panel');
+    const batchToggleLabel = document.getElementById('btn-toggle-batch-label');
+    if (btnToggleBatchMobile && batchPanel) {
+      btnToggleBatchMobile.onclick = () => {
+        const isOpen = batchPanel.classList.toggle('batch-panel-visible-mobile');
+        if (batchToggleLabel) {
+          batchToggleLabel.textContent = isOpen ? '✕ Đóng bảng nhập' : '⚡ Nhập bảng nhiều ca';
+        }
+      };
     }
 
     const dischargeSearchInput = document.getElementById('discharge-search-input');
@@ -1423,7 +1447,8 @@ class App {
     const deptStatsContainer = document.getElementById('dash-dept-stats-container') || document.getElementById('dash-dept-stats');
     if (deptStatsContainer) {
       const deptCounts = departments.map(d => {
-        const deptRecords = records.filter(r => r.khoaPhong === d.name);
+        const deptClean = (d.name || '').trim().toLowerCase();
+        const deptRecords = records.filter(r => (r.khoaPhong || '').trim().toLowerCase() === deptClean);
         const deptChuaSua = deptRecords.filter(r => r.trangThaiLoi === 'CHƯA SỬA' || r.trangThaiLoi === 'ĐÃ XEM - ĐANG SỬA').length;
         return {
           name: d.name,
@@ -1908,18 +1933,19 @@ class App {
     if (!tableBody) return;
 
     tableBody.innerHTML = departments.map((dept, index) => {
-      const staffCount = staffList.filter(s => s.department === dept.name).length;
-      const recordCount = records.filter(r => r.khoaPhong === dept.name).length;
+      const deptClean = (dept.name || '').trim().toLowerCase();
+      const staffCount = staffList.filter(s => (s.department || '').trim().toLowerCase() === deptClean).length;
+      const recordCount = records.filter(r => (r.khoaPhong || '').trim().toLowerCase() === deptClean).length;
 
       return `
         <tr>
           <td class="text-center font-mono text-muted">${index + 1}</td>
           <td>
-            <div class="font-bold">${escapeHtml(dept.name)}</div>
+            <div class="font-bold text-main">${escapeHtml(dept.name)}</div>
           </td>
-          <td><span class="badge-dept-code">${escapeHtml(dept.code || '---')}</span></td>
+          <td><span class="badge-dept-code font-mono">${escapeHtml(dept.code || '---')}</span></td>
           <td class="text-center"><span class="badge-tag">${staffCount} nhân sự</span></td>
-          <td class="text-center"><span class="badge-tag">${recordCount} lỗi HSBA</span></td>
+          <td class="text-center"><span class="badge-tag ${recordCount > 0 ? 'badge-status-danger font-semibold' : ''}">${recordCount} lỗi HSBA</span></td>
           <td class="text-center">
             <div class="action-buttons-group">
               <button class="btn-action-icon btn-edit" onclick="window.hsbaApp.modalController.openDepartmentModal('${dept.id}')" title="Sửa tên khoa">✏️</button>

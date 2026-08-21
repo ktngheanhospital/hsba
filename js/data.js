@@ -160,7 +160,7 @@ export const DEFAULT_STAFF = [
     username: 'admin', 
     password: '123', 
     name: 'Quản Trị Viên Hệ Thống', 
-    department: 'Ban Giám Đốc / Phòng CNTT', 
+    department: 'Phòng Công nghệ Thông tin', 
     position: 'Quản trị viên Hệ thống (Admin)', 
     phone: '0900000000', 
     zaloId: 'admin_hsba', 

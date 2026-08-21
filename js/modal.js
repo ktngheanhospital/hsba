@@ -539,7 +539,7 @@ export class ModalController {
         <div class="modal-header-title">
           <span class="modal-icon-badge">📋</span>
           <div>
-            <h3>Báo cáo danh sách ra viện hàng ngày</h3>
+            <h3>Báo cáo danh sách ra viện</h3>
             <p class="modal-subtitle">Khoa/Phòng lập danh sách bệnh nhân chuẩn bị ra viện để các bộ phận kiểm lỗi</p>
           </div>
         </div>
@@ -557,18 +557,18 @@ export class ModalController {
           <!-- 2. Mã KCB -->
           <div class="form-group">
             <label class="form-label required">2. Mã KCB (Mã Bệnh án):</label>
-            <input type="text" id="rep-maKCB" class="form-input" placeholder="Ví dụ: BN-2026-08412" required autofocus />
+            <input type="text" id="rep-maKCB" class="form-input font-makcb" placeholder="Ví dụ: BN-2026-08412" required autofocus />
           </div>
 
           <!-- 3. Tên BN -->
           <div class="form-group">
             <label class="form-label required">3. Tên Bệnh nhân:</label>
-            <input type="text" id="rep-tenBenhNhan" class="form-input" placeholder="Ví dụ: Hoàng Thị Lan" required />
+            <input type="text" id="rep-tenBenhNhan" class="form-input font-patient" placeholder="Ví dụ: Hoàng Thị Lan" required />
           </div>
 
           <!-- 4. Khoa/Phòng -->
           <div class="form-group">
-            <label class="form-label required">4. Khoa/Phòng:</label>
+            <label class="form-label required">4. Khoa / Phòng điều trị:</label>
             <select id="rep-phong" class="form-select" required>
               <option value="">-- Chọn Khoa/Phòng --</option>
               ${deptOptions}
@@ -591,10 +591,13 @@ export class ModalController {
           </div>
         </div>
 
-        <div class="modal-footer" style="margin-top: 16px;">
+        <div class="modal-footer" style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px;">
           <button type="button" class="btn btn-secondary" id="btn-cancel-rep">Hủy bỏ</button>
+          <button type="button" class="btn btn-outline" id="btn-save-add-another-rep">
+            <span>💾 Lưu & Thêm ca tiếp</span>
+          </button>
           <button type="submit" class="btn btn-primary">
-            <span>💾 Lưu báo cáo ra viện</span>
+            <span>💾 Lưu báo cáo</span>
           </button>
         </div>
       </form>
@@ -605,9 +608,21 @@ export class ModalController {
     document.getElementById('btn-modal-close').onclick = () => this.closeModal();
     document.getElementById('btn-cancel-rep').onclick = () => this.closeModal();
 
-    const form = document.getElementById('form-add-discharge-report');
-    form.onsubmit = (e) => {
-      e.preventDefault();
+    // Tự động điền Khoa khi chọn Bác sĩ
+    const doctorInput = document.getElementById('rep-tenBacSi');
+    const deptSelect = document.getElementById('rep-phong');
+    if (doctorInput && deptSelect) {
+      doctorInput.oninput = (e) => {
+        const val = e.target.value.trim().toLowerCase();
+        const matched = staffList.find(s => s.name.toLowerCase() === val);
+        if (matched && matched.department) {
+          const opt = Array.from(deptSelect.options).find(o => o.value === matched.department);
+          if (opt) deptSelect.value = matched.department;
+        }
+      };
+    }
+
+    const saveDischargeHandler = (keepOpen = false) => {
       const ngayBaoCao = document.getElementById('rep-ngayBaoCao').value;
       const maKCB = document.getElementById('rep-maKCB').value.trim();
       const tenBenhNhan = document.getElementById('rep-tenBenhNhan').value.trim();
@@ -616,8 +631,8 @@ export class ModalController {
       const nguoiBaoCao = document.getElementById('rep-nguoiBaoCao').value.trim();
 
       if (!maKCB || !tenBenhNhan || !phong || !tenBacSi) {
-        showToast('Vui lòng điền đầy đủ các thông tin bắt buộc!', 'error');
-        return;
+        showToast('Vui lòng điền đầy đủ Mã KCB, Tên Bệnh nhân, Khoa và Bác sĩ!', 'error');
+        return false;
       }
 
       storage.addDischargeReport({
@@ -630,9 +645,41 @@ export class ModalController {
       });
 
       showToast(`Đã thêm bệnh nhân ${tenBenhNhan} (${maKCB}) vào danh sách ra viện!`, 'success');
-      this.closeModal();
+      
+      // Đồng bộ ngày lọc danh sách ra viện
+      if (this.app && this.app.dischargeFilters) {
+        this.app.dischargeFilters.date = ngayBaoCao;
+      }
       this.app.refreshAllViews();
+
+      if (keepOpen) {
+        // Reset trường Mã KCB và Tên BN để tiếp tục nhập ca kế tiếp
+        const maInput = document.getElementById('rep-maKCB');
+        const nameInput = document.getElementById('rep-tenBenhNhan');
+        if (maInput) {
+          maInput.value = '';
+          maInput.focus();
+        }
+        if (nameInput) nameInput.value = '';
+      } else {
+        this.closeModal();
+      }
+      return true;
     };
+
+    const form = document.getElementById('form-add-discharge-report');
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      saveDischargeHandler(false);
+    };
+
+    const btnSaveAnother = document.getElementById('btn-save-add-another-rep');
+    if (btnSaveAnother) {
+      btnSaveAnother.onclick = (e) => {
+        e.preventDefault();
+        saveDischargeHandler(true);
+      };
+    }
   }
 
   // =========================================================================

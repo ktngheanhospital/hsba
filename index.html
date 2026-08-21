@@ -172,81 +172,93 @@
         <!-- ==================== VIEW 1: DANH SÁCH LỖI (RECORDS) ==================== -->
         <section id="view-records" class="view-section">
           
+          <!-- Mobile Action Bar for Error Reporting -->
+          <div class="view-mobile-action-bar">
+            <button type="button" class="btn btn-primary btn-mobile-primary-action" id="btn-open-add-modal-mobile">
+              <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+              <span>Báo cáo lỗi mới</span>
+            </button>
+            <button type="button" class="btn btn-outline btn-mobile-toggle-filter" id="btn-toggle-filter-mobile" title="Mở rộng / Thu gọn bộ lọc nâng cao">
+              <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clip-rule="evenodd"/></svg>
+              <span id="btn-toggle-filter-label">Bộ lọc</span>
+            </button>
+          </div>
+
           <!-- Filter Toolbar Panel (Soft Rounded Card) -->
-          <div class="soft-card-panel filter-panel">
+          <div class="soft-card-panel filter-panel" id="filter-section">
             <div class="filter-top-row">
               <div class="search-input-pill">
                 <svg class="search-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
                 <input type="text" id="search-input" class="search-field-control" placeholder="Tìm theo Mã KCB, Tên BN, Bác sĩ, Nội dung lỗi... (Enter để tìm toàn bộ)" />
                 <button class="btn-clear-icon" id="btn-clear-search" title="Xóa tìm kiếm">&times;</button>
               </div>
-              <button class="btn btn-primary btn-sm btn-add-mobile" id="btn-open-add-modal-mobile">
-                <span>+ Báo cáo lỗi</span>
-              </button>
             </div>
 
-            <!-- 5 Filter Inputs Grid -->
-            <div class="filter-grid-fields">
-              <div class="filter-field-unit">
-                <label class="field-label-caption">Khoa / Phòng:</label>
-                <input type="text" id="filter-dept-input" list="dl-khoa-phong" class="soft-form-control" placeholder="Tất cả các khoa..." />
-                <datalist id="dl-khoa-phong"></datalist>
+            <!-- Collapsible Filter Fields and Actions on Mobile -->
+            <div class="filter-collapsible-body" id="filter-collapsible-body">
+              <!-- 5 Filter Inputs Grid -->
+              <div class="filter-grid-fields">
+                <div class="filter-field-unit">
+                  <label class="field-label-caption">Khoa / Phòng:</label>
+                  <input type="text" id="filter-dept-input" list="dl-khoa-phong" class="soft-form-control" placeholder="Tất cả các khoa..." />
+                  <datalist id="dl-khoa-phong"></datalist>
+                </div>
+
+                <div class="filter-field-unit">
+                  <label class="field-label-caption">Bác sĩ / Người ra YL:</label>
+                  <input type="text" id="filter-staff-input" list="dl-nguoi-chi-dinh" class="soft-form-control" placeholder="Tất cả bác sĩ..." />
+                  <datalist id="dl-nguoi-chi-dinh"></datalist>
+                </div>
+
+                <div class="filter-field-unit">
+                  <label class="field-label-caption">Mức độ lỗi:</label>
+                  <input type="text" id="filter-status-input" list="dl-trang-thai" class="soft-form-control" placeholder="Tất cả mức độ lỗi..." />
+                  <datalist id="dl-trang-thai">
+                    <option value="Nhắc nhở">🟡 Nhắc nhở</option>
+                    <option value="Yêu cầu kiểm tra">🟣 Yêu cầu kiểm tra</option>
+                    <option value="Báo động">🚨 Báo động</option>
+                  </datalist>
+                </div>
+
+                <div class="filter-field-unit">
+                  <label class="field-label-caption">Kiểm từ ngày:</label>
+                  <input type="date" id="filter-from-date" class="soft-form-control" />
+                </div>
+
+                <div class="filter-field-unit">
+                  <label class="field-label-caption">Đến ngày:</label>
+                  <input type="date" id="filter-to-date" class="soft-form-control" />
+                </div>
               </div>
 
-              <div class="filter-field-unit">
-                <label class="field-label-caption">Bác sĩ / Người ra YL:</label>
-                <input type="text" id="filter-staff-input" list="dl-nguoi-chi-dinh" class="soft-form-control" placeholder="Tất cả bác sĩ..." />
-                <datalist id="dl-nguoi-chi-dinh"></datalist>
-              </div>
-
-              <div class="filter-field-unit">
-                <label class="field-label-caption">Mức độ lỗi:</label>
-                <input type="text" id="filter-status-input" list="dl-trang-thai" class="soft-form-control" placeholder="Tất cả mức độ lỗi..." />
-                <datalist id="dl-trang-thai">
-                  <option value="Nhắc nhở">🟡 Nhắc nhở</option>
-                  <option value="Yêu cầu kiểm tra">🟣 Yêu cầu kiểm tra</option>
-                  <option value="Báo động">🚨 Báo động</option>
-                </datalist>
-              </div>
-
-              <div class="filter-field-unit">
-                <label class="field-label-caption">Kiểm từ ngày:</label>
-                <input type="date" id="filter-from-date" class="soft-form-control" />
-              </div>
-
-              <div class="filter-field-unit">
-                <label class="field-label-caption">Đến ngày:</label>
-                <input type="date" id="filter-to-date" class="soft-form-control" />
-              </div>
-            </div>
-
-            <!-- Filter Status & Action Strip -->
-            <div class="filter-bottom-bar">
-              <div class="filter-status-indicator">
-                <span class="indicator-dot-teal"></span>
-                <span>Thời gian:</span>
-                <select id="filter-recent-days-select" class="recent-days-select" title="Chọn khoảng thời gian hiển thị danh sách lỗi">
-                  <option value="3">3 ngày gần đây</option>
-                  <option value="7">7 ngày gần đây</option>
-                  <option value="10" selected>10 ngày gần đây</option>
-                  <option value="15">15 ngày gần đây</option>
-                  <option value="30">30 ngày gần đây</option>
-                  <option value="60">60 ngày gần đây</option>
-                  <option value="90">90 ngày gần đây</option>
-                  <option value="all">Toàn bộ thời gian (Tất cả)</option>
-                </select>
-                <strong class="count-badge-pill" id="records-total-count">0 lỗi</strong>
-                <span class="text-caption text-muted">(Lỗi chưa hoàn thành ưu tiên lên đầu)</span>
-              </div>
-              <div class="filter-action-buttons">
-                <button class="btn btn-outline btn-sm" id="btn-export-excel" title="Xuất file CSV">
-                  <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
-                  <span>Xuất CSV</span>
-                </button>
-                <button class="btn btn-secondary btn-sm" id="btn-reset-filters" title="Đặt lại bộ lọc">
-                  <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
-                  <span>Đặt lại lọc</span>
-                </button>
+              <!-- Filter Status & Action Strip -->
+              <div class="filter-bottom-bar">
+                <div class="filter-status-indicator">
+                  <span class="indicator-dot-teal"></span>
+                  <span>Thời gian:</span>
+                  <select id="filter-recent-days-select" class="recent-days-select" title="Chọn khoảng thời gian hiển thị danh sách lỗi">
+                    <option value="3">3 ngày gần đây</option>
+                    <option value="7">7 ngày gần đây</option>
+                    <option value="10" selected>10 ngày gần đây</option>
+                    <option value="15">15 ngày gần đây</option>
+                    <option value="30">30 ngày gần đây</option>
+                    <option value="60">60 ngày gần đây</option>
+                    <option value="90">90 ngày gần đây</option>
+                    <option value="all">Toàn bộ thời gian (Tất cả)</option>
+                  </select>
+                  <strong class="count-badge-pill" id="records-total-count">0 lỗi</strong>
+                  <span class="text-caption text-muted">(Lỗi chưa hoàn thành ưu tiên lên đầu)</span>
+                </div>
+                <div class="filter-action-buttons">
+                  <button class="btn btn-outline btn-sm" id="btn-export-excel" title="Xuất file CSV">
+                    <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                    <span>Xuất CSV</span>
+                  </button>
+                  <button class="btn btn-secondary btn-sm" id="btn-reset-filters" title="Đặt lại bộ lọc">
+                    <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
+                    <span>Đặt lại lọc</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -290,8 +302,19 @@
             <p class="view-sub-title">Khoa phòng báo cáo ca ra viện hàng ngày & 4 Khâu kiểm lỗi: Dược, Kế toán BH, KHTH, IT</p>
           </div>
 
+          <!-- Mobile Action Bar for Discharge Reporting -->
+          <div class="view-mobile-action-bar">
+            <button type="button" class="btn btn-primary btn-mobile-primary-action" id="btn-open-add-discharge-modal-mobile">
+              <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+              <span>Báo ca ra viện mới</span>
+            </button>
+            <button type="button" class="btn btn-outline btn-mobile-toggle-batch" id="btn-toggle-batch-mobile" title="Hiện/Ẩn bảng nhập nhanh nhiều ca">
+              <span id="btn-toggle-batch-label">⚡ Nhập bảng nhiều ca</span>
+            </button>
+          </div>
+
           <!-- BATCH INLINE ENTRY PANEL (NHẬP NHANH NHIỀU CA CÙNG LÚC) -->
-          <div class="soft-card-panel batch-panel">
+          <div class="soft-card-panel batch-panel" id="batch-discharge-panel">
             <div class="batch-header-strip">
               <div class="batch-title-group">
                 <span class="batch-icon-badge">⚡</span>
@@ -852,11 +875,6 @@
     </main>
 
   </div>
-
-  <!-- ==================== MOBILE FLOATING ACTION BUTTON ==================== -->
-  <button class="btn-mobile-fab" id="btn-add-mobile-fab" title="Thêm lỗi HSBA mới">
-    <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-  </button>
 
   <!-- ==================== MOBILE BOTTOM NAVIGATION ==================== -->
   <nav class="mobile-bottom-nav" aria-label="Điều hướng di động">

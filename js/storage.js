@@ -72,6 +72,32 @@ export class StorageService {
         reps = reps.filter(r => r.id !== payload.old.id);
         this.saveDischargeReports(reps);
       }
+    } else if (table === 'departments') {
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+        const dept = supabaseService.dbToDept(payload.new);
+        const depts = this.getDepartments();
+        const idx = depts.findIndex(d => d.id === dept.id);
+        if (idx !== -1) depts[idx] = dept;
+        else depts.push(dept);
+        this.saveDepartments(depts);
+      } else if (payload.eventType === 'DELETE') {
+        let depts = this.getDepartments();
+        depts = depts.filter(d => d.id !== payload.old.id);
+        this.saveDepartments(depts);
+      }
+    } else if (table === 'staff') {
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+        const staffMember = supabaseService.dbToStaff(payload.new);
+        const staffList = this.getStaff();
+        const idx = staffList.findIndex(s => s.id === staffMember.id);
+        if (idx !== -1) staffList[idx] = staffMember;
+        else staffList.push(staffMember);
+        this.saveStaff(staffList);
+      } else if (payload.eventType === 'DELETE') {
+        let staffList = this.getStaff();
+        staffList = staffList.filter(s => s.id !== payload.old.id);
+        this.saveStaff(staffList);
+      }
     }
 
     if (window.hsbaApp) {
@@ -531,20 +557,32 @@ export class StorageService {
   getDepartments() {
     try {
       const deptsJson = localStorage.getItem(STORAGE_KEYS.DEPARTMENTS);
-      return deptsJson ? JSON.parse(deptsJson) : DEFAULT_DEPARTMENTS;
+      if (!deptsJson) return DEFAULT_DEPARTMENTS;
+      const parsed = JSON.parse(deptsJson);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_DEPARTMENTS;
     } catch (e) {
       return DEFAULT_DEPARTMENTS;
     }
   }
 
   saveDepartments(depts) {
-    localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(depts));
+    if (Array.isArray(depts)) {
+      localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(depts));
+      return true;
+    }
+    return false;
   }
 
   addDepartment(dept) {
     const depts = this.getDepartments();
-    const newId = 'KP' + String(depts.length + 1).padStart(2, '0');
-    const newDept = { id: newId, name: dept.name, code: dept.code || '', order: depts.length + 1 };
+    const cleanName = (dept.name || '').trim();
+    const cleanCode = (dept.code || '').trim();
+    const maxNum = depts.reduce((max, d) => {
+      const num = parseInt((d.id || '').replace(/\D/g, ''), 10);
+      return !isNaN(num) && num > max ? num : max;
+    }, 0);
+    const newId = 'KP' + String(maxNum + 1).padStart(2, '0');
+    const newDept = { id: newId, name: cleanName, code: cleanCode, order: depts.length + 1 };
     depts.push(newDept);
     this.saveDepartments(depts);
     supabaseService.upsertDepartment(newDept);
@@ -555,21 +593,54 @@ export class StorageService {
     const depts = this.getDepartments();
     const index = depts.findIndex(d => d.id === id);
     if (index !== -1) {
-      const oldName = depts[index].name;
-      depts[index] = { ...depts[index], ...updates };
+      const oldName = (depts[index].name || '').trim();
+      const newName = updates.name !== undefined ? updates.name.trim() : oldName;
+      const newCode = updates.code !== undefined ? updates.code.trim() : depts[index].code;
+
+      depts[index] = { ...depts[index], ...updates, name: newName, code: newCode };
       this.saveDepartments(depts);
       supabaseService.upsertDepartment(depts[index]);
 
-      if (updates.name && updates.name !== oldName) {
+      // Cascade update to records, staff, discharge_reports, and activeDepartment if department name changed
+      if (newName && newName !== oldName) {
+        // 1. Records
         const records = this.getRecords();
-        let changed = false;
+        let recordsChanged = false;
         records.forEach(r => {
-          if (r.khoaPhong === oldName) {
-            r.khoaPhong = updates.name;
-            changed = true;
+          if ((r.khoaPhong || '').trim().toLowerCase() === oldName.toLowerCase()) {
+            r.khoaPhong = newName;
+            recordsChanged = true;
           }
         });
-        if (changed) this.saveRecords(records);
+        if (recordsChanged) this.saveRecords(records);
+
+        // 2. Staff
+        const staff = this.getStaff();
+        let staffChanged = false;
+        staff.forEach(s => {
+          if ((s.department || '').trim().toLowerCase() === oldName.toLowerCase()) {
+            s.department = newName;
+            staffChanged = true;
+          }
+        });
+        if (staffChanged) this.saveStaff(staff);
+
+        // 3. Discharge Reports
+        const reports = this.getDischargeReports();
+        let reportsChanged = false;
+        reports.forEach(rep => {
+          if ((rep.phong || '').trim().toLowerCase() === oldName.toLowerCase()) {
+            rep.phong = newName;
+            reportsChanged = true;
+          }
+        });
+        if (reportsChanged) this.saveDischargeReports(reports);
+
+        // 4. Active Department
+        const activeDept = this.getActiveDepartment();
+        if ((activeDept || '').trim().toLowerCase() === oldName.toLowerCase()) {
+          this.setActiveDepartment(newName);
+        }
       }
       return true;
     }

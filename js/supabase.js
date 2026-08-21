@@ -449,62 +449,143 @@ class SupabaseService {
     }
   }
 
-  // Kéo toàn bộ dữ liệu từ Supabase về LocalStorage
+  // Đồng bộ thông minh 2 chiều (Smart 2-Way Sync): Bảo toàn dữ liệu cục bộ và hòa nhập dữ liệu Cloud
+  async smartSync(storageService) {
+    if (!this.client) return;
+    this.isSyncing = true;
+
+    try {
+      // 1. Departments (Danh mục Khoa/Phòng)
+      const localDepts = storageService.getDepartments();
+      const cloudDepts = await this.fetchDepartments();
+
+      if (cloudDepts !== null) {
+        if (cloudDepts.length === 0 && localDepts.length > 0) {
+          // Cloud trống -> Seed local lên cloud
+          await this.client.from('departments').upsert(localDepts.map(d => this.deptToDb(d)));
+        } else if (cloudDepts.length > 0) {
+          // Push any local departments missing on cloud
+          const deptsToPush = localDepts.filter(ld => 
+            !cloudDepts.some(cd => cd.id === ld.id || (cd.name && ld.name && cd.name.trim().toLowerCase() === ld.name.trim().toLowerCase()))
+          );
+          if (deptsToPush.length) {
+            await this.client.from('departments').upsert(deptsToPush.map(d => this.deptToDb(d)));
+          }
+
+          // Hợp nhất danh sách không làm mất khoa/phòng người dùng vừa tạo
+          const mergedDepts = [...localDepts];
+          cloudDepts.forEach(cd => {
+            const exists = mergedDepts.some(md => md.id === cd.id || (md.name && cd.name && md.name.trim().toLowerCase() === cd.name.trim().toLowerCase()));
+            if (!exists) {
+              mergedDepts.push(cd);
+            }
+          });
+          storageService.saveDepartments(mergedDepts);
+        }
+      }
+
+      // 2. Staff (Nhân viên)
+      const localStaff = storageService.getStaff();
+      const cloudStaff = await this.fetchStaff();
+
+      if (cloudStaff !== null) {
+        if (cloudStaff.length === 0 && localStaff.length > 0) {
+          await this.client.from('staff').upsert(localStaff.map(s => this.staffToDb(s)));
+        } else if (cloudStaff.length > 0) {
+          const staffToPush = localStaff.filter(ls => !cloudStaff.some(cs => cs.id === ls.id));
+          if (staffToPush.length) {
+            await this.client.from('staff').upsert(staffToPush.map(s => this.staffToDb(s)));
+          }
+
+          const mergedStaff = [...localStaff];
+          cloudStaff.forEach(cs => {
+            const exists = mergedStaff.some(ms => ms.id === cs.id);
+            if (!exists) {
+              mergedStaff.push(cs);
+            }
+          });
+          storageService.saveStaff(mergedStaff);
+        }
+      }
+
+      // 3. Records (Bản ghi lỗi HSBA)
+      const localRecords = storageService.getRecords();
+      const cloudRecords = await this.fetchRecords();
+
+      if (cloudRecords !== null) {
+        if (cloudRecords.length === 0 && localRecords.length > 0) {
+          await this.client.from('records').upsert(localRecords.map(r => this.recordToDb(r)));
+        } else if (cloudRecords.length > 0) {
+          const recordsToPush = localRecords.filter(lr => !cloudRecords.some(cr => cr.id === lr.id));
+          if (recordsToPush.length) {
+            await this.client.from('records').upsert(recordsToPush.map(r => this.recordToDb(r)));
+          }
+
+          const mergedRecords = [...localRecords];
+          cloudRecords.forEach(cr => {
+            const idx = mergedRecords.findIndex(mr => mr.id === cr.id);
+            if (idx === -1) {
+              mergedRecords.unshift(cr);
+            } else {
+              mergedRecords[idx] = cr;
+            }
+          });
+          storageService.saveRecords(mergedRecords);
+        }
+      }
+
+      // 4. Discharge Reports (Báo cáo ra viện)
+      const localDischarge = storageService.getDischargeReports();
+      const cloudDischarge = await this.fetchDischargeReports();
+
+      if (cloudDischarge !== null) {
+        if (cloudDischarge.length === 0 && localDischarge.length > 0) {
+          await this.client.from('discharge_reports').upsert(localDischarge.map(r => this.dischargeToDb(r)));
+        } else if (cloudDischarge.length > 0) {
+          const repToPush = localDischarge.filter(lr => !cloudDischarge.some(cr => cr.id === lr.id));
+          if (repToPush.length) {
+            await this.client.from('discharge_reports').upsert(repToPush.map(r => this.dischargeToDb(r)));
+          }
+
+          const mergedReps = [...localDischarge];
+          cloudDischarge.forEach(cr => {
+            const idx = mergedReps.findIndex(mr => mr.id === cr.id);
+            if (idx === -1) {
+              mergedReps.unshift(cr);
+            } else {
+              mergedReps[idx] = cr;
+            }
+          });
+          storageService.saveDischargeReports(mergedReps);
+        }
+      }
+    } catch (e) {
+      console.warn('Lỗi trong quá trình smartSync:', e);
+    } finally {
+      this.isSyncing = false;
+    }
+  }
+
+  // Kéo toàn bộ dữ liệu từ Supabase về LocalStorage một cách an toàn
   async pullAllCloudDataToLocal(storageService) {
     if (!this.client) return { success: false, message: 'Chưa khởi tạo Supabase Client' };
 
     try {
-      this.isSyncing = true;
-
-      // 1. Departments
-      const cloudDepts = await this.fetchDepartments();
-      if (cloudDepts && cloudDepts.length) {
-        storageService.saveDepartments(cloudDepts);
-      }
-
-      // 2. Staff
-      const cloudStaff = await this.fetchStaff();
-      if (cloudStaff && cloudStaff.length) {
-        storageService.saveStaff(cloudStaff);
-      }
-
-      // 3. Records
-      const cloudRecords = await this.fetchRecords();
-      if (cloudRecords && cloudRecords.length) {
-        storageService.saveRecords(cloudRecords);
-      }
-
-      // 4. Discharge Reports
-      const cloudDischarge = await this.fetchDischargeReports();
-      if (cloudDischarge && cloudDischarge.length) {
-        storageService.saveDischargeReports(cloudDischarge);
-      }
-
-      this.isSyncing = false;
-      return { success: true, message: 'Đã tải dữ liệu mới nhất từ Supabase Cloud về máy!' };
+      await this.smartSync(storageService);
+      return { success: true, message: 'Đã đồng bộ dữ liệu mới nhất từ Supabase Cloud!' };
     } catch (e) {
-      this.isSyncing = false;
-      console.error('Lỗi khi kéo dữ liệu từ Cloud:', e);
-      return { success: false, message: 'Lỗi khi kéo dữ liệu từ Cloud: ' + (e.message || e) };
+      console.error('Lỗi khi tải dữ liệu từ Cloud:', e);
+      return { success: false, message: 'Lỗi khi tải dữ liệu từ Cloud: ' + (e.message || e) };
     }
   }
 
-  // Tự động đồng bộ lúc khởi động: Nếu Cloud trống thì seed dữ liệu mặc định, nếu có thì pull về
+  // Tự động đồng bộ lúc khởi động
   async autoInitSync(storageService, onComplete) {
     if (!this.client) return;
 
     try {
-      const cloudDepts = await this.fetchDepartments();
-      
-      // Nếu Cloud trống hoàn toàn -> Tự động đẩy dữ liệu khởi tạo lên Cloud
-      if (!cloudDepts || cloudDepts.length === 0) {
-        console.log('⚡ Supabase database trống. Đang đẩy dữ liệu khởi tạo ban đầu lên Cloud...');
-        await this.pushAllLocalDataToCloud(storageService);
-      } else {
-        // Nếu Cloud đã có dữ liệu -> Tải về cập nhật LocalStorage
-        console.log('⚡ Đang đồng bộ dữ liệu từ Supabase Cloud...');
-        await this.pullAllCloudDataToLocal(storageService);
-      }
+      console.log('⚡ Đang tự động kiểm tra và đồng bộ dữ liệu với Cloud...');
+      await this.smartSync(storageService);
 
       if (typeof onComplete === 'function') {
         onComplete();
