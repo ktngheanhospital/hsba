@@ -1,7 +1,9 @@
 {
   "name": "Theo dõi HSBA BV HNĐK Nghệ An",
-  "description": "Hệ thống rà soát hồ sơ bệnh án, báo cáo và chốt ra viện 4 khâu chuyên môn - BV Hữu Nghị Đa Khoa Nghệ An - Giai đoạn 2.",
-  "requestFramePermissions": [],
+  "description": "Hệ thống rà soát hồ sơ bệnh án, báo cáo và chốt ra viện 4 khâu chuyên môn kèm hệ thống thông báo đẩy (Push Notification) tức thời - BV Hữu Nghị Đa Khoa Nghệ An - Giai đoạn 2.",
+  "requestFramePermissions": [
+    "notifications"
+  ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]

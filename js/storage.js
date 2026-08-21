@@ -27,6 +27,8 @@ export class StorageService {
     const isInit = localStorage.getItem(STORAGE_KEYS.INITIALIZED);
     if (!isInit) {
       this.resetToDefaults();
+    } else {
+      this.cleanMockData();
     }
 
     // Tự động đồng bộ với Supabase Cloud Database
@@ -42,6 +44,39 @@ export class StorageService {
         this.handleRealtimeEvent(table, payload);
       });
     }, 300);
+  }
+
+  // Tự động dọn dẹp các mockup dữ liệu mẫu ban đầu
+  cleanMockData() {
+    try {
+      const mockRecIds = ['REC-1001', 'REC-1002', 'REC-1003', 'REC-1004'];
+      const mockRepIds = ['BCRV-2026-001', 'BCRV-2026-002', 'BCRV-2026-003'];
+      const legacyMockStaffIds = ['NV00', 'NV01', 'NV02', 'NV03', 'NV04', 'NV08', 'NV09', 'NV10', 'NV11', 'NV13'];
+      
+      const records = this.getRecords().filter(r => !mockRecIds.includes(r.id));
+      this.saveRecords(records);
+      
+      const reps = this.getDischargeReports().filter(r => !mockRepIds.includes(r.id));
+      this.saveDischargeReports(reps);
+
+      // Dọn dẹp danh sách nhân sự mock nếu có
+      let staff = this.getStaff();
+      const hasMockStaff = staff.some(s => legacyMockStaffIds.includes(s.id) || (s.name && s.name.includes('Trần Thị Mai')));
+      if (hasMockStaff) {
+        // Giữ lại các nhân sự do người dùng tự tạo mới (không nằm trong list mock cũ)
+        const customStaff = staff.filter(s => !legacyMockStaffIds.includes(s.id) && !s.id.startsWith('NV_'));
+        this.saveStaff([...DEFAULT_STAFF, ...customStaff]);
+      }
+
+      // Cập nhật người dùng hiện tại nếu đang là user mock cũ
+      const currentUser = this.getCurrentUser();
+      if (currentUser && (legacyMockStaffIds.includes(currentUser.id) || (currentUser.name && currentUser.name.includes('Trần Thị Mai')))) {
+        const cleanUser = DEFAULT_STAFF.find(s => s.defaultRole === currentUser.defaultRole) || DEFAULT_STAFF[0];
+        this.setCurrentUser(cleanUser);
+      }
+    } catch (e) {
+      console.warn('Lỗi khi dọn dẹp mockup:', e);
+    }
   }
 
   handleRealtimeEvent(table, payload) {
@@ -402,9 +437,12 @@ export class StorageService {
       ngayCapNhat: nowStr,
       chotRaVien: false,
       ngayChotRaVien: null,
-      zaloSentCount: recordData.zaloSentCount || 0,
-      lastZaloSentAt: recordData.lastZaloSentAt || null,
-      zaloHistory: recordData.zaloHistory || []
+      pushSentCount: recordData.pushSentCount || recordData.zaloSentCount || 0,
+      lastPushSentAt: recordData.lastPushSentAt || recordData.lastZaloSentAt || null,
+      pushHistory: recordData.pushHistory || [],
+      zaloSentCount: recordData.pushSentCount || recordData.zaloSentCount || 0,
+      lastZaloSentAt: recordData.lastPushSentAt || recordData.lastZaloSentAt || null,
+      zaloHistory: recordData.pushHistory || recordData.zaloHistory || []
     };
 
     records.unshift(newRecord);

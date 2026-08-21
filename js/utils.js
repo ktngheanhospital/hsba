@@ -17,9 +17,12 @@ export function formatDateVN(dateStr) {
 // Định dạng ngày giờ dạng HH:mm DD/MM/YYYY
 export function formatDateTimeVN(dateTimeStr) {
   if (!dateTimeStr) return '---';
-  const [datePart, timePart] = dateTimeStr.split(' ');
-  if (!timePart) return formatDateVN(datePart);
-  return `${timePart} ${formatDateVN(datePart)}`;
+  const cleanStr = dateTimeStr.replace('T', ' ');
+  const [datePart, timePart] = cleanStr.split(' ');
+  const formattedDate = formatDateVN(datePart);
+  if (!timePart) return formattedDate;
+  const shortTime = timePart.substring(0, 5); // HH:mm
+  return `${shortTime} ${formattedDate}`;
 }
 
 // Lấy ngày hiện tại YYYY-MM-DD

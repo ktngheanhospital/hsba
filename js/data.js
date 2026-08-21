@@ -156,322 +156,104 @@ export const DEFAULT_DEPARTMENTS = [
 export const DEFAULT_STAFF = [
   // Quản trị viên hệ thống (Admin)
   { 
-    id: 'NV00', 
+    id: 'NV_ADMIN', 
     username: 'admin', 
     password: '123', 
     name: 'Quản Trị Viên Hệ Thống', 
     department: 'Phòng Công nghệ Thông tin', 
-    position: 'Quản trị viên Hệ thống (Admin)', 
-    phone: '0900000000', 
-    zaloId: 'admin_hsba', 
+    position: 'Quản trị viên (Admin)', 
+    phone: '', 
+    zaloId: '', 
     defaultRole: 'ADMIN', 
     avatarEmoji: '👑' 
   },
 
-  // Bác sĩ điều trị (Khoa phòng - Nhóm 2)
+  // Phòng Kế hoạch Tổng hợp (Duyệt KHTH & Chốt cổng)
   { 
-    id: 'NV02', 
-    username: 'mai_noi', 
+    id: 'NV_KHTH', 
+    username: 'khth', 
     password: '123', 
-    name: 'BS. CKI. Trần Thị Mai', 
-    department: 'Khoa Nội Tổng hợp', 
-    position: 'Bác sĩ Điều trị', 
-    phone: '0983112233', 
-    zaloId: 'bs_mai_noi', 
-    defaultRole: 'NHOM_2', 
-    avatarEmoji: '👩‍⚕️' 
+    name: 'Phòng Kế hoạch Tổng hợp', 
+    department: 'Phòng Kế hoạch Tổng hợp', 
+    position: 'Chuyên viên KHTH / Chốt cổng', 
+    phone: '', 
+    zaloId: '', 
+    defaultRole: 'KHTH', 
+    avatarEmoji: '📋' 
   },
+
+  // Tổ Rà Soát HSBA (Nhóm 1)
   { 
-    id: 'NV01', 
-    username: 'hung_cc', 
+    id: 'NV_RASOAT', 
+    username: 'rasoat', 
     password: '123', 
-    name: 'BS. CKII. Nguyễn Văn Hùng', 
-    department: 'Khoa Cấp cứu & Hồi sức tích cực', 
-    position: 'Bác sĩ Trưởng khoa', 
-    phone: '0912345678', 
-    zaloId: 'dr_hung_cc', 
-    defaultRole: 'NHOM_2', 
-    avatarEmoji: '👨‍⚕️' 
+    name: 'Tổ Rà Soát HSBA', 
+    department: 'Phòng Kế hoạch Tổng hợp', 
+    position: 'Cán bộ Rà Soát HSBA', 
+    phone: '', 
+    zaloId: '', 
+    defaultRole: 'NHOM_1', 
+    avatarEmoji: '🔍' 
   },
-  { 
-    id: 'NV03', 
-    username: 'long_tim', 
-    password: '123', 
-    name: 'ThS. BS. Lê Hoàng Long', 
-    department: 'Khoa Nội Tim mạch', 
-    position: 'Bác sĩ Điều trị', 
-    phone: '0905667788', 
-    zaloId: 'dr_long_timmach', 
-    defaultRole: 'NHOM_2', 
-    avatarEmoji: '👨‍⚕️' 
-  },
-  { 
-    id: 'NV04', 
-    username: 'tuan_ngoai', 
-    password: '123', 
-    name: 'BS. CKI. Phạm Minh Tuấn', 
-    department: 'Khoa Ngoại Tổng hợp', 
-    position: 'Bác sĩ Điều trị', 
-    phone: '0974556677', 
-    zaloId: 'bs_tuan_ngoai', 
-    defaultRole: 'NHOM_2', 
-    avatarEmoji: '👨‍⚕️' 
-  },
-  
+
   // Khoa Dược (Duyệt khâu Dược)
   { 
-    id: 'NV10', 
+    id: 'NV_DUOC', 
     username: 'duoc', 
     password: '123', 
-    name: 'ThS. DS. Đặng Thu Hà', 
+    name: 'Khoa Dược', 
     department: 'Khoa Dược', 
-    position: 'Dược sĩ Lâm sàng & Duyệt Dược', 
-    phone: '0978990011', 
-    zaloId: 'ds_thuha_duoc', 
+    position: 'Dược sĩ / Duyệt Dược', 
+    phone: '', 
+    zaloId: '', 
     defaultRole: 'DUOC', 
     avatarEmoji: '💊' 
   },
   
   // Kế toán Bảo hiểm (Duyệt khâu Kế toán BH)
   { 
-    id: 'NV13', 
+    id: 'NV_KETOAN', 
     username: 'ketoan', 
     password: '123', 
-    name: 'CN. Nguyễn Thị Minh Trang', 
+    name: 'Phòng Tài chính Kế toán (BHYT)', 
     department: 'Phòng Tài chính Kế toán (BHYT)', 
-    position: 'Kế toán Trưởng giám định BHYT', 
-    phone: '0988776655', 
-    zaloId: 'trang_ktbh_bv', 
+    position: 'Kế toán Giám định BHYT', 
+    phone: '', 
+    zaloId: '', 
     defaultRole: 'KETOAN_BH', 
     avatarEmoji: '💵' 
   },
 
-  // Kế hoạch Tổng hợp (Duyệt khâu KHTH & Chốt cổng)
+  // Công nghệ Thông tin (Duyệt khâu IT & HIS)
   { 
-    id: 'NV08', 
-    username: 'khth', 
-    password: '123', 
-    name: 'ThS. BS. Phan Thanh Sơn', 
-    department: 'Phòng Kế hoạch Tổng hợp', 
-    position: 'Trưởng phòng KHTH & Chốt cổng', 
-    phone: '0913998877', 
-    zaloId: 'dr_son_khth', 
-    defaultRole: 'KHTH', 
-    avatarEmoji: '📋' 
-  },
-  { 
-    id: 'NV09', 
-    username: 'rasoat', 
-    password: '123', 
-    name: 'CN. Nguyễn Thị Thu Hà', 
-    department: 'Phòng Kế hoạch Tổng hợp', 
-    position: 'Tổ Rà Soát HSBA & Giám Sát', 
-    phone: '0977223344', 
-    zaloId: 'ha_qlcl_bv', 
-    defaultRole: 'NHOM_1', 
-    avatarEmoji: '🔍' 
-  },
-  
-  // Công nghệ Thông tin (Duyệt khâu IT & Cài đặt)
-  { 
-    id: 'NV11', 
+    id: 'NV_IT', 
     username: 'it', 
     password: '123', 
-    name: 'KS. Lê Minh Trí', 
+    name: 'Phòng Công nghệ Thông tin', 
     department: 'Phòng Công nghệ Thông tin', 
     position: 'Kỹ sư Quản trị HIS & Cổng BHXH', 
-    phone: '0909887766', 
-    zaloId: 'tri_it_his', 
+    phone: '', 
+    zaloId: '', 
     defaultRole: 'IT', 
     avatarEmoji: '💻' 
+  },
+
+  // Bác sĩ điều trị / Khoa phòng lâm sàng (Nhóm 2)
+  { 
+    id: 'NV_KHOA', 
+    username: 'khoa', 
+    password: '123', 
+    name: 'Khoa Lâm sàng / Bác sĩ', 
+    department: 'Khoa Nội Tổng hợp', 
+    position: 'Bác sĩ Điều trị', 
+    phone: '', 
+    zaloId: '', 
+    defaultRole: 'NHOM_2', 
+    avatarEmoji: '👨‍⚕️' 
   }
 ];
 
-// Hàm tạo ngày tương đối
-function getRelativeDateStr(daysAgo = 0) {
-  const d = new Date();
-  d.setDate(d.getDate() - daysAgo);
-  return d.toISOString().slice(0, 10);
-}
+export const DEFAULT_RECORDS = [];
 
-export const DEFAULT_RECORDS = [
-  {
-    id: 'REC-1001',
-    maKCB: 'BN-2026-08412',
-    tenBenhNhan: 'Nguyễn Văn An',
-    khoaPhong: 'Khoa Cấp cứu & Hồi sức tích cực',
-    nguoiChiDinh: 'BS. CKII. Nguyễn Văn Hùng',
-    ngayVaoKhoa: getRelativeDateStr(3),
-    ngayKiemHoSo: getRelativeDateStr(0),
-    thoiGianChiDinhYL: `${getRelativeDateStr(3)} 08:30`,
-    mucDoLoi: 'Báo động',
-    mucDoCanhBao: 'Báo động',
-    dienGiaiLoi: 'Chỉ định kháng sinh Ceftriaxone 2g tiêm IV nhưng thiếu ghi nhận kết quả test lẩy da kháng sinh và tiền sử dị ứng trong phiếu khám ban đầu.',
-    trangThaiKiemDuyet: 'Báo động',
-    trangThaiLoi: 'CHƯA SỬA',
-    yKienNguoiSua: '',
-    ngayTao: `${getRelativeDateStr(0)} 09:15`,
-    ngayCapNhat: `${getRelativeDateStr(0)} 09:15`,
-    chotRaVien: false,
-    ngayChotRaVien: null,
-    zaloSentCount: 1,
-    lastZaloSentAt: `${getRelativeDateStr(0)} 09:20`,
-    zaloHistory: []
-  },
-  {
-    id: 'REC-1002',
-    maKCB: 'BN-2026-08412',
-    tenBenhNhan: 'Nguyễn Văn An',
-    khoaPhong: 'Khoa Cấp cứu & Hồi sức tích cực',
-    nguoiChiDinh: 'BS. CKII. Nguyễn Văn Hùng',
-    ngayVaoKhoa: getRelativeDateStr(3),
-    ngayKiemHoSo: getRelativeDateStr(1),
-    thoiGianChiDinhYL: `${getRelativeDateStr(2)} 14:00`,
-    mucDoLoi: 'Nhắc nhở',
-    mucDoCanhBao: 'Nhắc nhở',
-    dienGiaiLoi: 'Phiếu theo dõi truyền dịch thiếu ký nhận thời gian kết thúc chai Natri Clorid 0.9% 500ml và tốc độ nhỏ giọt thực tế.',
-    trangThaiKiemDuyet: 'Nhắc nhở',
-    trangThaiLoi: 'ĐÃ XEM - ĐANG SỬA',
-    yKienNguoiSua: 'Đã nhắc điều dưỡng ca trực bổ sung chữ ký và thời gian kết thúc vào tờ chăm sóc.',
-    ngayTao: `${getRelativeDateStr(1)} 09:20`,
-    ngayCapNhat: `${getRelativeDateStr(0)} 10:45`,
-    chotRaVien: false,
-    ngayChotRaVien: null,
-    zaloSentCount: 2,
-    lastZaloSentAt: `${getRelativeDateStr(0)} 11:20`,
-    zaloHistory: []
-  },
-  {
-    id: 'REC-1004',
-    maKCB: 'BN-2026-07890',
-    tenBenhNhan: 'Lê Đình Trọng',
-    khoaPhong: 'Khoa Ngoại Tổng hợp',
-    nguoiChiDinh: 'BS. CKI. Phạm Minh Tuấn',
-    ngayVaoKhoa: getRelativeDateStr(6),
-    ngayKiemHoSo: getRelativeDateStr(2),
-    thoiGianChiDinhYL: `${getRelativeDateStr(5)} 15:45`,
-    mucDoLoi: 'Yêu cầu kiểm tra',
-    mucDoCanhBao: 'Yêu cầu kiểm tra',
-    dienGiaiLoi: 'Phiếu phẫu thuật nội soi viêm ruột thừa cấp thiếu chữ ký của Bác sĩ phụ mổ và thiếu mô tả vị trí vết mổ dẫn lưu.',
-    trangThaiKiemDuyet: 'Yêu cầu kiểm tra',
-    trangThaiLoi: 'CHƯA SỬA',
-    yKienNguoiSua: '',
-    ngayTao: `${getRelativeDateStr(2)} 11:00`,
-    ngayCapNhat: `${getRelativeDateStr(2)} 11:00`,
-    chotRaVien: false,
-    ngayChotRaVien: null,
-    zaloSentCount: 3,
-    lastZaloSentAt: `${getRelativeDateStr(2)} 15:00`,
-    zaloHistory: []
-  },
-  {
-    id: 'REC-1003',
-    maKCB: 'BN-2026-09105',
-    tenBenhNhan: 'Trần Thị Mai Hương',
-    khoaPhong: 'Khoa Nội Tổng hợp',
-    nguoiChiDinh: 'BS. CKI. Trần Thị Mai',
-    ngayVaoKhoa: getRelativeDateStr(5),
-    ngayKiemHoSo: getRelativeDateStr(1),
-    thoiGianChiDinhYL: `${getRelativeDateStr(4)} 09:00`,
-    mucDoLoi: 'Nhắc nhở',
-    mucDoCanhBao: 'Nhắc nhở',
-    dienGiaiLoi: 'Chỉ định xét nghiệm HbA1c và Glucose máu đói nhưng chẩn đoán chính chưa thể hiện mã ICD Đái tháo đường type 2 (E11.9).',
-    trangThaiKiemDuyet: 'Nhắc nhở',
-    trangThaiLoi: 'ĐÃ XONG',
-    yKienNguoiSua: 'Đã bổ sung mã ICD chẩn đoán kèm theo ĐTĐ type 2 vào tờ trích biên bản hội chẩn và phần mềm HIS.',
-    ngayTao: `${getRelativeDateStr(1)} 14:10`,
-    ngayCapNhat: `${getRelativeDateStr(0)} 08:30`,
-    chotRaVien: false,
-    ngayChotRaVien: null,
-    zaloSentCount: 1,
-    lastZaloSentAt: `${getRelativeDateStr(1)} 14:15`,
-    zaloHistory: []
-  }
-];
+export const DEFAULT_DISCHARGE_REPORTS = [];
 
-export const DEFAULT_DISCHARGE_REPORTS = [
-  {
-    id: 'BCRV-2026-001',
-    ngayBaoCao: getRelativeDateStr(0),
-    maKCB: 'BN-2026-08412',
-    tenBenhNhan: 'Nguyễn Văn An',
-    tenBacSi: 'BS. CKII. Nguyễn Văn Hùng',
-    phong: 'Khoa Cấp cứu & Hồi sức tích cực',
-    kiemDuoc: {
-      status: 'CO_LOI',
-      note: 'Thiếu kết quả test lẩy da kháng sinh Ceftriaxone\nCần bổ sung phiếu kết quả thử phản ứng thuốc trước khi ra viện'
-    },
-    kiemKeToanBH: {
-      status: 'KHONG_LOI',
-      note: ''
-    },
-    kiemKHTH: {
-      status: 'CO_LOI',
-      note: 'Phiếu truyền dịch thiếu ký nhận kết thúc ca trực'
-    },
-    kiemIT: {
-      status: 'KHONG_LOI',
-      note: ''
-    },
-    baoCaoTinhTrangSuaLoi: 'Khoa đang yêu cầu điều dưỡng ca trực bổ sung chữ ký',
-    chotThongCong: 'CHUA',
-    ngayThongCong: null,
-    nguoiThongCong: null
-  },
-  {
-    id: 'BCRV-2026-002',
-    ngayBaoCao: getRelativeDateStr(0),
-    maKCB: 'BN-2026-09105',
-    tenBenhNhan: 'Trần Thị Mai Hương',
-    tenBacSi: 'BS. CKI. Trần Thị Mai',
-    phong: 'Khoa Nội Tổng hợp',
-    kiemDuoc: {
-      status: 'KHONG_LOI',
-      note: ''
-    },
-    kiemKeToanBH: {
-      status: 'KHONG_LOI',
-      note: ''
-    },
-    kiemKHTH: {
-      status: 'KHONG_LOI',
-      note: ''
-    },
-    kiemIT: {
-      status: 'KHONG_LOI',
-      note: ''
-    },
-    baoCaoTinhTrangSuaLoi: 'Đã hoàn tất toàn bộ hồ sơ và khớp dữ liệu HIS',
-    chotThongCong: 'CO',
-    ngayThongCong: `${getRelativeDateStr(0)} 15:30`,
-    nguoiThongCong: 'ThS. BS. Phan Thanh Sơn (KHTH)'
-  },
-  {
-    id: 'BCRV-2026-003',
-    ngayBaoCao: getRelativeDateStr(1),
-    maKCB: 'BN-2026-07890',
-    tenBenhNhan: 'Lê Đình Trọng',
-    tenBacSi: 'BS. CKI. Phạm Minh Tuấn',
-    phong: 'Khoa Ngoại Tổng hợp',
-    kiemDuoc: {
-      status: 'KHONG_LOI',
-      note: ''
-    },
-    kiemKeToanBH: {
-      status: 'CO_LOI',
-      note: 'Thiếu áp mã phẫu thuật nội soi loại 2'
-    },
-    kiemKHTH: {
-      status: 'CO_LOI',
-      note: 'Phiếu phẫu thuật thiếu chữ ký bác sĩ phụ mổ'
-    },
-    kiemIT: {
-      status: 'CO_LOI',
-      note: 'Lỗi mã XML bảng kê 130 chưa đồng bộ với danh mục HIS'
-    },
-    baoCaoTinhTrangSuaLoi: 'BS Tuấn đã ký bổ sung, IT đã ánh xạ lại mã XML',
-    chotThongCong: 'CHUA',
-    ngayThongCong: null,
-    nguoiThongCong: null
-  }
-];

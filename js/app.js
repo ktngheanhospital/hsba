@@ -11,7 +11,7 @@
 
 import { storage } from './storage.js';
 import { ROLES, PERMISSION_COLUMNS } from './data.js';
-import { zaloService } from './zaloService.js';
+import { notificationService } from './notificationService.js';
 import { supabaseService } from './supabase.js';
 import { ModalController } from './modal.js';
 import {
@@ -30,6 +30,7 @@ import {
 
 class App {
   constructor() {
+    window.hsbaApp = this;
     this.currentTab = 'records'; // 'dashboard' | 'records' | 'discharge' | 'settings'
     this.settingsSubTab = 'zalo'; // 'zalo' | 'permissions' | 'departments' | 'staff' | 'backup'
     this.modalController = new ModalController(this);
@@ -70,6 +71,18 @@ class App {
   init() {
     this.bindEvents();
     this.populateFilterSuggestions();
+    this.renderNotificationCenter();
+
+    // Lắng nghe cập nhật thông báo đẩy tức thời
+    notificationService.addListener(() => {
+      this.renderNotificationCenter();
+      if (this.currentTab === 'settings' && this.settingsSubTab === 'zalo') {
+        this.renderZaloSettings();
+      }
+      if (this.currentTab === 'dashboard') {
+        this.renderDashboardView();
+      }
+    });
 
     if (!storage.isAuthenticated()) {
       this.renderLoginScreen();
@@ -91,7 +104,7 @@ class App {
     setInterval(updateClock, 30000);
   }
 
-  // Render Màn hình Đăng nhập (Login Screen) & Thẻ Đăng nhập Nhanh 1-chạm
+  // Render Màn hình Đăng nhập (Login Screen)
   renderLoginScreen() {
     const loginView = document.getElementById('login-screen-view');
     const workspaceView = document.getElementById('app-main-workspace');
@@ -101,33 +114,10 @@ class App {
     const errEl = document.getElementById('login-error-msg');
     if (errEl) errEl.style.display = 'none';
 
-    const quickContainer = document.getElementById('quick-role-cards-container');
-    if (quickContainer) {
-      const staffList = storage.getStaff();
-      quickContainer.innerHTML = staffList.map(staff => {
-        const role = ROLES[staff.defaultRole] || ROLES.NHOM_2;
-        return `
-          <button type="button" class="quick-role-card" data-staff-id="${staff.id}">
-            <div class="quick-role-avatar">${staff.avatarEmoji || '👨‍⚕️'}</div>
-            <div class="quick-role-info">
-              <div class="quick-role-name">${escapeHtml(staff.name)}</div>
-              <div class="quick-role-title">${escapeHtml(staff.position)} · <span class="quick-role-dept">${escapeHtml(staff.department)}</span></div>
-            </div>
-            <span class="quick-role-pill ${role.badgeClass}">${role.icon} ${escapeHtml(role.shortName || role.name)}</span>
-          </button>
-        `;
-      }).join('');
-
-      quickContainer.querySelectorAll('.quick-role-card').forEach(card => {
-        card.onclick = (e) => {
-          const staffId = e.currentTarget.getAttribute('data-staff-id');
-          const res = storage.loginAsStaff(staffId);
-          if (res.success) {
-            this.handleLoginSuccess(res.user);
-          }
-        };
-      });
-    }
+    const usernameInput = document.getElementById('login-username');
+    const passwordInput = document.getElementById('login-password');
+    if (usernameInput) usernameInput.value = '';
+    if (passwordInput) passwordInput.value = '';
 
     const form = document.getElementById('form-login-auth');
     if (form) {
@@ -162,6 +152,7 @@ class App {
 
     this.renderHeaderUserProfile();
     this.updateRoleUI();
+    this.renderNotificationCenter();
     this.populateFilterSuggestions();
     this.initBatchDischargeEntry();
     this.switchTab('records');
@@ -270,6 +261,98 @@ class App {
     }
   }
 
+  // Render Trung tâm Thông Báo Đẩy (Notification Center Flyout & Badges)
+  renderNotificationCenter() {
+    const countEl = document.getElementById('header-notif-count');
+    const countPill = document.getElementById('notif-panel-unread-pill');
+    const listEl = document.getElementById('notification-flyout-list');
+    const permBanner = document.getElementById('notif-permission-banner');
+
+    const unreadCount = notificationService.getUnreadCount();
+    const notifications = notificationService.getNotifications();
+
+    if (countEl) {
+      if (unreadCount > 0) {
+        countEl.textContent = unreadCount > 99 ? '99+' : unreadCount;
+        countEl.style.display = 'flex';
+      } else {
+        countEl.style.display = 'none';
+      }
+    }
+
+    if (countPill) {
+      countPill.textContent = `${unreadCount} mới`;
+    }
+
+    if (permBanner) {
+      permBanner.style.display = notificationService.hasBrowserPermission() ? 'none' : 'flex';
+    }
+
+    if (!listEl) return;
+
+    if (!notifications.length) {
+      listEl.innerHTML = `
+        <div class="notif-empty-state" style="padding: 24px 16px; text-align: center; color: var(--text-muted);">
+          <span style="font-size: 2rem; display: block; margin-bottom: 8px;">🎉</span>
+          <div style="font-weight: 600; font-size: 0.92rem; color: var(--text-main); margin-bottom: 4px;">Không có thông báo mới</div>
+          <p style="font-size: 0.78rem; margin: 0; line-height: 1.4;">Tất cả thông báo lỗi hồ sơ bệnh án đẩy đến Bác sĩ sẽ hiển thị tức thời tại đây.</p>
+        </div>
+      `;
+      return;
+    }
+
+    listEl.innerHTML = notifications.slice(0, 40).map(n => {
+      const isUnread = !n.isRead && !n.read;
+      const timeDisplay = formatDateTimeVN(n.timeFormatted || n.time || n.timestamp || '');
+      let levelBadge = '';
+      if (n.mucDoCanhBao === 'Báo động' || n.mucDoCanhBao === 'Khẩn cấp') {
+        levelBadge = '<span class="notif-level-badge" style="background:#fee2e2;color:#991b1b;padding:2px 6px;border-radius:4px;font-size:0.7rem;font-weight:700;">🚨 Báo động</span>';
+      } else if (n.mucDoCanhBao === 'Yêu cầu kiểm tra') {
+        levelBadge = '<span class="notif-level-badge" style="background:#f3e8ff;color:#6b21a8;padding:2px 6px;border-radius:4px;font-size:0.7rem;font-weight:700;">🟣 Yêu cầu KT</span>';
+      } else {
+        levelBadge = '<span class="notif-level-badge" style="background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-size:0.7rem;font-weight:700;">🟡 Nhắc nhở</span>';
+      }
+
+      return `
+        <div class="notif-item-card ${isUnread ? 'notif-unread' : 'notif-read'}" data-notif-id="${n.id}" data-record-id="${n.recordId || ''}" style="padding: 10px 12px; border-bottom: 1px solid var(--border-soft); cursor: pointer; transition: background 0.15s; ${isUnread ? 'background: rgba(79, 70, 229, 0.05);' : ''}">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 4px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              ${isUnread ? '<span style="width: 7px; height: 7px; background: #4f46e5; border-radius: 50%; display: inline-block;"></span>' : ''}
+              <strong style="font-size: 0.82rem; color: var(--text-main);">${escapeHtml(n.title)}</strong>
+            </div>
+            <span style="font-size: 0.7rem; color: var(--text-muted); white-space: nowrap;">${timeDisplay}</span>
+          </div>
+          <p style="font-size: 0.76rem; color: var(--text-muted); margin: 0 0 6px 0; line-height: 1.35; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; display: -webkit-box;">
+            ${escapeHtml(n.body)}
+          </p>
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              ${levelBadge}
+              <span style="color: var(--text-muted);">👤 ${escapeHtml(n.recipientName || 'BS')}</span>
+            </div>
+            ${n.recordId ? '<span style="color: var(--color-primary); font-weight: 600;">Xem chi tiết ➔</span>' : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    listEl.querySelectorAll('.notif-item-card').forEach(card => {
+      card.onclick = (e) => {
+        const notifId = card.getAttribute('data-notif-id');
+        const recordId = card.getAttribute('data-record-id');
+        if (notifId) {
+          notificationService.markAsRead(notifId);
+          this.renderNotificationCenter();
+        }
+        if (recordId) {
+          const panel = document.getElementById('notification-flyout-panel');
+          if (panel) panel.style.display = 'none';
+          this.modalController.openEditErrorModal(recordId);
+        }
+      };
+    });
+  }
+
   // Chuyển nhanh vai trò và mở khóa
   switchRoleAndUnlock(roleId) {
     storage.setCurrentRole(roleId);
@@ -281,6 +364,69 @@ class App {
 
   // Gắn các sự kiện giao diện
   bindEvents() {
+    // 1. Notification Center Toggle & Actions
+    const btnToggleNotifs = document.getElementById('btn-toggle-notifications');
+    const notifPanel = document.getElementById('notification-flyout-panel');
+    const notifWrap = document.getElementById('notification-center-wrap');
+
+    if (btnToggleNotifs && notifPanel) {
+      btnToggleNotifs.onclick = (e) => {
+        e.stopPropagation();
+        const isHidden = notifPanel.style.display === 'none' || !notifPanel.style.display;
+        notifPanel.style.display = isHidden ? 'block' : 'none';
+        if (isHidden) {
+          this.renderNotificationCenter();
+        }
+      };
+
+      document.addEventListener('click', (e) => {
+        if (notifWrap && !notifWrap.contains(e.target) && notifPanel.style.display !== 'none') {
+          notifPanel.style.display = 'none';
+        }
+      });
+    }
+
+    const btnNotifMarkAll = document.getElementById('btn-notif-mark-all-read');
+    if (btnNotifMarkAll) {
+      btnNotifMarkAll.onclick = () => {
+        notificationService.markAllAsRead();
+        this.renderNotificationCenter();
+        showToast('Đã đánh dấu đọc tất cả thông báo', 'info');
+      };
+    }
+
+    const btnNotifClearAll = document.getElementById('btn-notif-clear-all');
+    if (btnNotifClearAll) {
+      btnNotifClearAll.onclick = () => {
+        notificationService.clearNotifications();
+        this.renderNotificationCenter();
+        showToast('Đã dọn dẹp danh sách thông báo', 'info');
+      };
+    }
+
+    const btnEnableBrowserPush = document.getElementById('btn-enable-browser-push');
+    if (btnEnableBrowserPush) {
+      btnEnableBrowserPush.onclick = async () => {
+        const granted = await notificationService.requestBrowserPermission();
+        if (granted) {
+          showToast('✅ Đã bật thông báo đẩy trên trình duyệt thành công!', 'success');
+        } else {
+          showToast('⚠️ Bạn chưa cho phép thông báo trên trình duyệt', 'warning');
+        }
+        this.renderNotificationCenter();
+      };
+    }
+
+    const btnOpenPushSettings = document.getElementById('btn-open-push-settings');
+    if (btnOpenPushSettings) {
+      btnOpenPushSettings.onclick = () => {
+        if (notifPanel) notifPanel.style.display = 'none';
+        this.switchTab('settings');
+        const pushSubTabBtn = document.querySelector('[data-subtab="zalo"]');
+        if (pushSubTabBtn) pushSubTabBtn.click();
+      };
+    }
+
     document.querySelectorAll('[data-tab]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const tab = e.currentTarget.getAttribute('data-tab');
@@ -777,14 +923,27 @@ class App {
     const paginationContainer = document.getElementById('records-pagination');
 
     if (!pagedRecords.length) {
-      const emptyHtml = `
-        <div class="empty-state">
-          <div class="empty-icon">📋</div>
-          <h4>Không tìm thấy bản ghi lỗi nào trong 10 ngày gần đây</h4>
-          <p>Nhập từ khóa vào ô tìm kiếm phía trên để tra cứu toàn bộ lịch sử</p>
-          <button class="btn btn-outline" id="btn-empty-reset">Đặt lại bộ lọc</button>
-        </div>
-      `;
+      const allRecords = storage.getRecords();
+      let emptyHtml = '';
+      if (allRecords.length === 0) {
+        emptyHtml = `
+          <div class="empty-state">
+            <div class="empty-icon">📋</div>
+            <h4>Chưa có bản ghi lỗi HSBA nào</h4>
+            <p>Hệ thống sạch và sẵn sàng. Bấm nút <strong>+ Báo cáo lỗi mới</strong> ở góc trên để bắt đầu thêm hồ sơ rà soát.</p>
+            ${storage.canAddRecord() ? '<button class="btn btn-primary" onclick="window.hsbaApp.modalController.openAddErrorModal()" style="margin-top: 8px;">+ Báo cáo lỗi mới</button>' : ''}
+          </div>
+        `;
+      } else {
+        emptyHtml = `
+          <div class="empty-state">
+            <div class="empty-icon">🔍</div>
+            <h4>Không tìm thấy bản ghi lỗi nào phù hợp</h4>
+            <p>Không có kết quả trong khoảng thời gian hoặc tiêu chí tìm kiếm hiện tại.</p>
+            <button class="btn btn-outline" id="btn-empty-reset" style="margin-top: 8px;">Đặt lại bộ lọc</button>
+          </div>
+        `;
+      }
       if (tableBody) {
         tableBody.innerHTML = `<tr><td colspan="8">${emptyHtml}</td></tr>`;
         const btnReset = document.getElementById('btn-empty-reset');
@@ -1244,11 +1403,12 @@ class App {
     const cardsContainer = document.getElementById('discharge-cards-container');
 
     if (!reports.length) {
+      const isFilterDay = !!this.dischargeFilters.date;
       const emptyHtml = `
         <div class="empty-state">
           <div class="empty-icon">🏥</div>
-          <h4>Chưa có hồ sơ báo cáo ra viện nào</h4>
-          <p>Nhập các ca ra viện vào bảng phía trên và bấm <strong>💾 Lưu tất cả</strong> để các bộ phận kiểm duyệt</p>
+          <h4>Chưa có ca báo cáo ra viện nào ${isFilterDay ? `trong ngày ${formatDateVN(this.dischargeFilters.date)}` : ''}</h4>
+          <p>Nhập các ca ra viện vào bảng phía trên và bấm <strong>Lưu tất cả ca vừa nhập</strong> để 4 khâu chuyên môn cùng kiểm duyệt.</p>
         </div>
       `;
       if (tableBody) tableBody.innerHTML = `<tr><td colspan="8">${emptyHtml}</td></tr>`;
@@ -1385,8 +1545,8 @@ class App {
     const totalDischarge = dischargeReports.length;
     const gateRatio = totalDischarge > 0 ? Math.round((daThongCong / totalDischarge) * 100) : 0;
 
-    const khanCap = records.filter(r => r.mucDoCanhBao === 'Khẩn cấp').length;
-    const zaloLogs = storage.getZaloLogs();
+    const khanCap = records.filter(r => r.mucDoCanhBao === 'Khẩn cấp' || r.mucDoLoi === 'Báo động').length;
+    const pushLogs = notificationService.getSystemPushLogs();
 
     // 1. Cập nhật các KPI Metrics chính
     const elTotal = document.getElementById('dash-total-errors');
@@ -1396,7 +1556,7 @@ class App {
     if (elPending) elPending.textContent = unresolved;
 
     const elUrgent = document.getElementById('dash-urgent-count');
-    if (elUrgent) elUrgent.textContent = `${khanCap} lỗi khẩn cấp`;
+    if (elUrgent) elUrgent.textContent = `${khanCap} lỗi khẩn cấp/báo động`;
 
     const elGate = document.getElementById('dash-gate-passed');
     if (elGate) elGate.textContent = `${daThongCong}/${totalDischarge}`;
@@ -1405,7 +1565,7 @@ class App {
     if (elGateRatio) elGateRatio.textContent = `${gateRatio}% ca ra viện`;
 
     const elZalo = document.getElementById('dash-zalo-sent');
-    if (elZalo) elZalo.textContent = `${zaloLogs.length} tin`;
+    if (elZalo) elZalo.textContent = `${pushLogs.length} thông báo`;
 
     // 2. Tình hình 4 Khâu Kiểm Lỗi Ra Viện
     const stepsSummaryContainer = document.getElementById('dash-steps-summary-container');
@@ -1567,23 +1727,54 @@ class App {
         e.preventDefault();
         const config = {
           enabled: document.getElementById('zalo-cfg-enabled').checked,
+          soundEnabled: document.getElementById('push-cfg-sound') ? document.getElementById('push-cfg-sound').checked : true,
           autoReminder: document.getElementById('zalo-cfg-auto').checked,
           reminderIntervalHours: parseInt(document.getElementById('zalo-cfg-interval').value) || 2,
           oaName: document.getElementById('zalo-cfg-oaname').value.trim(),
-          oaId: document.getElementById('zalo-cfg-oaid').value.trim(),
+          titleTemplate: document.getElementById('push-cfg-title-template') ? document.getElementById('push-cfg-title-template').value : '🚨 [CẢNH BÁO HSBA] {tenBenhNhan} - {mucDoCanhBao}',
           messageTemplate: document.getElementById('zalo-cfg-template').value
         };
-        zaloService.saveConfig(config);
-        showToast('Đã lưu cấu hình tin nhắn Zalo tự động (2 giờ/lần)!', 'success');
+        notificationService.saveConfig(config);
+        showToast('💾 Đã lưu cấu hình Thông Báo Đẩy (Push Notification)!', 'success');
+      };
+    }
+
+    const btnReqPushPermSettings = document.getElementById('btn-request-push-perm-settings');
+    if (btnReqPushPermSettings) {
+      btnReqPushPermSettings.onclick = async () => {
+        const granted = await notificationService.requestBrowserPermission();
+        if (granted) {
+          showToast('✅ Đã cấp quyền thông báo trình duyệt thành công!', 'success');
+        } else {
+          showToast('⚠️ Bạn chưa cho phép thông báo trên trình duyệt', 'warning');
+        }
+        this.renderZaloSettings();
+      };
+    }
+
+    const btnTestPush = document.getElementById('btn-test-push-notification');
+    if (btnTestPush) {
+      btnTestPush.onclick = () => {
+        notificationService.sendTestNotification();
+        showToast('🔔 Đã bắn thông báo đẩy thử nghiệm kèm chuông y tế!', 'success');
+        this.renderZaloSettings();
       };
     }
 
     const btnTriggerBatchZalo = document.getElementById('btn-trigger-batch-zalo');
     if (btnTriggerBatchZalo) {
       btnTriggerBatchZalo.onclick = () => {
-        zaloService.checkAndDispatchAutoReminders();
-        showToast('Đã quét và gửi tin nhắn Zalo nhắc nhở cho tất cả các lỗi chưa hoàn thành!', 'info', 4000);
+        const sentCount = notificationService.checkAndDispatchAutoReminders();
+        showToast(`⚡ Đã quét và bắn Push Notification nhắc nhở (${sentCount} ca chưa sửa)!`, 'info', 4000);
         this.renderZaloSettings();
+      };
+    }
+
+    const btnRefreshPushLogs = document.getElementById('btn-refresh-push-logs');
+    if (btnRefreshPushLogs) {
+      btnRefreshPushLogs.onclick = () => {
+        this.renderZaloSettings();
+        showToast('Đã làm mới nhật ký thông báo đẩy', 'info');
       };
     }
 
@@ -1798,13 +1989,32 @@ class App {
     }
   }
 
-  // Render cấu hình Zalo và Nhật ký gửi tin
+  // Render cấu hình Thông Báo Đẩy (Push Notification) và Nhật ký phát thông báo
   renderZaloSettings() {
-    const config = zaloService.getConfig();
-    const logs = zaloService.getSystemZaloLogs();
+    const config = notificationService.getConfig();
+    const logs = notificationService.getSystemPushLogs();
+    const hasPerm = notificationService.hasBrowserPermission();
+
+    const permBadge = document.getElementById('push-perm-badge');
+    if (permBadge) {
+      if (hasPerm) {
+        permBadge.className = 'badge-role badge-admin';
+        permBadge.style.background = '#dcfce7';
+        permBadge.style.color = '#166534';
+        permBadge.textContent = '🟢 Đã cấp quyền trình duyệt';
+      } else {
+        permBadge.className = 'badge-role';
+        permBadge.style.background = '#fee2e2';
+        permBadge.style.color = '#991b1b';
+        permBadge.textContent = '🔴 Chưa cấp quyền';
+      }
+    }
 
     const enabledEl = document.getElementById('zalo-cfg-enabled');
     if (enabledEl) enabledEl.checked = !!config.enabled;
+
+    const soundEl = document.getElementById('push-cfg-sound');
+    if (soundEl) soundEl.checked = config.soundEnabled !== false;
 
     const autoEl = document.getElementById('zalo-cfg-auto');
     if (autoEl) autoEl.checked = !!config.autoReminder;
@@ -1813,10 +2023,10 @@ class App {
     if (intervalEl) intervalEl.value = config.reminderIntervalHours || 2;
 
     const oaNameEl = document.getElementById('zalo-cfg-oaname');
-    if (oaNameEl) oaNameEl.value = config.oaName || '';
+    if (oaNameEl) oaNameEl.value = config.oaName || 'Tổ Rà Soát HSBA - Bệnh Viện';
 
-    const oaIdEl = document.getElementById('zalo-cfg-oaid');
-    if (oaIdEl) oaIdEl.value = config.oaId || '';
+    const titleTplEl = document.getElementById('push-cfg-title-template');
+    if (titleTplEl) titleTplEl.value = config.titleTemplate || '🚨 [CẢNH BÁO HSBA] {tenBenhNhan} - {mucDoCanhBao}';
 
     const templateEl = document.getElementById('zalo-cfg-template');
     if (templateEl) templateEl.value = config.messageTemplate || '';
@@ -1824,26 +2034,39 @@ class App {
     const logsTableBody = document.getElementById('settings-zalo-logs-body');
     if (logsTableBody) {
       if (!logs.length) {
-        logsTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted p-4">Chưa có nhật ký gửi tin Zalo nào</td></tr>`;
+        logsTableBody.innerHTML = `<tr><td colspan="7" class="text-center text-muted p-4">Chưa có nhật ký phát thông báo đẩy nào</td></tr>`;
       } else {
-        logsTableBody.innerHTML = logs.slice(0, 30).map((l, index) => {
+        logsTableBody.innerHTML = logs.slice(0, 40).map((l, index) => {
+          let levelTag = '';
+          if (l.mucDoCanhBao === 'Báo động' || l.mucDoCanhBao === 'Khẩn cấp') {
+            levelTag = '<span class="perm-tag" style="background:#fee2e2;color:#991b1b;">🚨 Báo động</span>';
+          } else if (l.mucDoCanhBao === 'Yêu cầu kiểm tra') {
+            levelTag = '<span class="perm-tag" style="background:#f3e8ff;color:#6b21a8;">🟣 Yêu cầu KT</span>';
+          } else {
+            levelTag = '<span class="perm-tag" style="background:#fef3c7;color:#92400e;">🟡 Nhắc nhở</span>';
+          }
+
           return `
             <tr>
               <td class="text-center font-mono text-muted text-xs">${index + 1}</td>
               <td><span class="text-xs font-bold">${formatDateTimeVN(l.time)}</span></td>
               <td>
                 <div class="font-bold text-primary">${escapeHtml(l.recipientName)}</div>
-                <div class="text-xs font-mono text-muted">${escapeHtml(l.targetLabel || l.phone || l.zaloId || '---')}</div>
-              </td>
-              <td>
-                <div><strong>${escapeHtml(l.tenBenhNhan || '')}</strong> (${escapeHtml(l.maKCB || '')})</div>
                 <div class="text-xs text-muted">${escapeHtml(l.khoaPhong || '')}</div>
               </td>
+              <td>
+                <div><strong>${escapeHtml(l.tenBenhNhan || '')}</strong></div>
+                <div class="text-xs font-mono text-muted">${escapeHtml(l.maKCB || '')}</div>
+              </td>
               <td class="text-center">
-                ${l.isAuto ? '<span class="perm-tag perm-tag-yes">🤖 Tự động 2h</span>' : '<span class="perm-tag" style="background:#e0f2fe;color:#0369a1;">👤 Thủ công</span>'}
+                ${levelTag}
               </td>
               <td>
-                <div class="cell-error-text text-xs" style="-webkit-line-clamp: 1;" title="${escapeHtml(l.content)}">${escapeHtml(l.content)}</div>
+                <div class="font-medium text-xs text-slate-800">${escapeHtml(l.title || '')}</div>
+                <div class="cell-error-text text-xs" style="-webkit-line-clamp: 1;" title="${escapeHtml(l.body || l.content || '')}">${escapeHtml(l.body || l.content || '')}</div>
+              </td>
+              <td class="text-center">
+                ${l.isAuto ? '<span class="perm-tag perm-tag-yes">🤖 Tự động</span>' : '<span class="perm-tag" style="background:#e0f2fe;color:#0369a1;">👤 Thủ công</span>'}
               </td>
             </tr>
           `;
@@ -1981,9 +2204,7 @@ class App {
 
     tableBody.innerHTML = staffList.map((staff, index) => {
       const role = ROLES[staff.defaultRole] || ROLES.NHOM_2;
-      const targetPhone = staff.phone ? staff.phone.replace(/[^0-9]/g, '') : null;
-      const targetZaloId = staff.zaloId ? staff.zaloId.trim() : null;
-      const chatUrl = zaloService.getZaloChatUrl({ phone: targetPhone, zaloId: targetZaloId });
+      const pushIdentifier = staff.zaloId || staff.phone || staff.id;
 
       return `
         <tr>
@@ -2000,13 +2221,11 @@ class App {
           <td>
             <div style="display: flex; flex-direction: column; gap: 2px;">
               ${staff.phone ? `<a href="tel:${staff.phone}" class="staff-phone-link">📞 ${escapeHtml(staff.phone)}</a>` : '<span class="text-muted text-xs">Chưa có SĐT</span>'}
-              ${targetZaloId ? `<span class="text-xs" style="color: #0068FF; font-weight: 600;">📱 Zalo: @${escapeHtml(targetZaloId)}</span>` : ''}
+              ${pushIdentifier ? `<span class="text-xs font-mono" style="color: #4f46e5;">🔔 ID: ${escapeHtml(pushIdentifier)}</span>` : ''}
             </div>
           </td>
           <td class="text-center">
-            ${chatUrl ? `
-              <a href="${chatUrl}" target="_blank" class="btn-zalo-micro" title="Mở chat Zalo">💬 Chat</a>
-            ` : '<span class="text-muted text-xs">---</span>'}
+            <span class="perm-tag perm-tag-yes" title="Nhân viên sẵn sàng nhận cảnh báo đẩy HSBA tức thời">🔔 Sẵn sàng Push</span>
           </td>
           <td>
             <span class="role-pill ${role.badgeClass}">${role.icon} ${escapeHtml(role.name.split(':')[0])}</span>

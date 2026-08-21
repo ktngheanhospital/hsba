@@ -44,7 +44,7 @@
           <label class="login-field-label" for="login-username">Tài khoản / Số điện thoại / Username:</label>
           <div class="login-input-wrap">
             <svg class="login-input-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>
-            <input type="text" id="login-username" class="login-input-control" placeholder="admin, duoc, ketoan, khth, it, mai_noi..." required autofocus />
+            <input type="text" id="login-username" class="login-input-control" placeholder="Nhập tên đăng nhập hoặc số điện thoại..." required autofocus />
           </div>
         </div>
 
@@ -52,7 +52,7 @@
           <label class="login-field-label" for="login-password">Mật khẩu:</label>
           <div class="login-input-wrap">
             <svg class="login-input-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>
-            <input type="password" id="login-password" class="login-input-control" placeholder="Mặc định: 123 (hoặc admin123)" required />
+            <input type="password" id="login-password" class="login-input-control" placeholder="Nhập mật khẩu..." required />
           </div>
         </div>
 
@@ -62,17 +62,6 @@
           <span>Đăng Nhập Vào Hệ Thống ➔</span>
         </button>
       </form>
-
-      <!-- Quick 1-Click Role Login Demo Section -->
-      <div class="quick-login-section">
-        <div class="quick-login-divider">
-          <span>Hoặc đăng nhập nhanh theo vai trò</span>
-        </div>
-
-        <div class="quick-role-cards-grid" id="quick-role-cards-container">
-          <!-- Rendered by JS: 8 Demo personnel accounts -->
-        </div>
-      </div>
 
     </div>
   </div>
@@ -131,6 +120,51 @@
           <div class="cloud-header-pill" id="header-cloud-status" title="Bấm để vào Cài đặt Cloud Supabase">
             <span class="cloud-status-dot" id="header-cloud-dot"></span>
             <span class="cloud-status-text" id="header-cloud-text">Cloud Sync</span>
+          </div>
+
+          <!-- Notification Center Bell & Dropdown Flyout -->
+          <div class="notification-center-wrap" id="notification-center-wrap">
+            <button type="button" class="notification-bell-btn" id="btn-toggle-notifications" title="Trung tâm Thông báo Đẩy">
+              <svg class="bell-svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
+              </svg>
+              <span class="notification-badge" id="header-notif-count" style="display: none;">0</span>
+            </button>
+
+            <!-- Dropdown Flyout Panel -->
+            <div class="notification-flyout-dropdown" id="notification-flyout-panel" style="display: none;">
+              <div class="notif-flyout-header">
+                <div class="notif-flyout-title-row">
+                  <span class="notif-flyout-title">🔔 Thông Báo Đẩy</span>
+                  <span class="notif-flyout-count-pill" id="notif-panel-unread-pill">0 mới</span>
+                </div>
+                <div class="notif-flyout-actions">
+                  <button type="button" class="notif-action-text-btn" id="btn-notif-mark-all-read" title="Đánh dấu tất cả là đã đọc">Đã đọc tất cả</button>
+                  <button type="button" class="notif-action-text-btn text-muted" id="btn-notif-clear-all" title="Xóa danh sách thông báo">Dọn dẹp</button>
+                </div>
+              </div>
+
+              <!-- Permission Prompt Banner inside Flyout -->
+              <div class="notif-permission-banner" id="notif-permission-banner" style="display: none;">
+                <div class="notif-perm-text">
+                  <strong>Bật thông báo đẩy trên trình duyệt</strong>
+                  <span>Nhận cảnh báo hồ sơ bệnh án tức thời cả khi không nhìn màn hình</span>
+                </div>
+                <button type="button" class="btn btn-primary btn-xs" id="btn-enable-browser-push">Bật ngay</button>
+              </div>
+
+              <!-- Notification List Body -->
+              <div class="notif-flyout-list" id="notification-flyout-list">
+                <!-- Rendered by JS -->
+              </div>
+
+              <!-- Footer -->
+              <div class="notif-flyout-footer">
+                <button type="button" class="notif-footer-link" id="btn-open-push-settings">
+                  ⚙️ Cài đặt & Lịch sử Đẩy thông báo
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- User Profile Card -->
@@ -482,10 +516,10 @@
 
             <div class="soft-kpi-card accent-purple">
               <div class="kpi-icon-pill">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/></svg>
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/></svg>
               </div>
               <div class="kpi-info-content">
-                <span class="kpi-label-caption">Tin Zalo tự động</span>
+                <span class="kpi-label-caption">Thông Báo Đẩy (Push)</span>
                 <h3 class="kpi-metric-number text-purple" id="dash-zalo-sent">0</h3>
                 <span class="kpi-footnote">Chu kỳ 2 giờ / lần</span>
               </div>
@@ -518,7 +552,7 @@
         <section id="view-settings" class="view-section" style="display: none;">
           <div class="view-header-strip">
             <h2 class="view-main-title">Cài Đặt & Cấu Hình Hệ Thống</h2>
-            <p class="view-sub-title">Quản trị phân quyền chuyên môn, cấu hình tin nhắn Zalo, danh mục khoa phòng, nhân sự và sao lưu dữ liệu</p>
+            <p class="view-sub-title">Quản trị phân quyền chuyên môn, cấu hình thông báo đẩy (Push Notification), danh mục khoa phòng, nhân sự và sao lưu dữ liệu</p>
           </div>
 
           <!-- Unauthorized Locked Screen (Chỉ Admin & IT có quyền) -->
@@ -527,7 +561,7 @@
           <!-- Authorized Settings Area (Admin / IT) -->
           <div id="settings-authorized-container">
             <div class="subnav-pill-carousel">
-              <button class="subnav-pill-btn active" data-subtab="zalo">💬 Cấu hình Zalo</button>
+              <button class="subnav-pill-btn active" data-subtab="zalo">🔔 Thông Báo Đẩy (Push)</button>
               <button class="subnav-pill-btn" data-subtab="permissions">🔒 Phân quyền Chỉnh sửa Cột</button>
               <button class="subnav-pill-btn" data-subtab="departments">🏥 Danh mục Khoa/Phòng</button>
               <button class="subnav-pill-btn" data-subtab="staff">👨‍⚕️ Profile Nhân viên</button>
@@ -535,27 +569,49 @@
               <button class="subnav-pill-btn" data-subtab="backup">💾 Dữ liệu & Sao lưu</button>
             </div>
 
-            <!-- Subtab 1: Zalo Config -->
+            <!-- Subtab 1: Push Notification Config -->
             <div id="settings-sec-zalo" class="settings-pane">
               <div class="dashboard-details-grid">
                 <div class="soft-card-panel">
                   <div class="panel-header-strip">
-                    <h4 class="panel-header-title text-primary">Cấu hình Tin nhắn Zalo Tự động</h4>
+                    <h4 class="panel-header-title text-primary">Cấu hình Thông Báo Đẩy Tới Nhân Viên (Push Notification)</h4>
                   </div>
                   <div class="panel-body-area">
+                    <!-- Browser Permission Status Box -->
+                    <div class="push-permission-card" id="push-permission-status-card" style="margin-bottom: 1rem; padding: 12px 16px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;">
+                      <div class="flex-between">
+                        <div>
+                          <strong style="color: #166534; font-size: 0.88rem;">Trạng thái Quyền Thông Báo Trình Duyệt:</strong>
+                          <span id="push-perm-badge" class="badge-role badge-admin" style="margin-left: 6px;">Đang kiểm tra...</span>
+                        </div>
+                        <button type="button" class="btn btn-primary btn-xs" id="btn-request-push-perm-settings">🔔 Cấp quyền ngay</button>
+                      </div>
+                      <p class="text-xs text-muted" style="margin-top: 4px; margin-bottom: 0;">
+                        Cho phép hệ thống đẩy tin tức thời tới desktop/điện thoại của Bác sĩ ngay cả khi thu nhỏ trình duyệt.
+                      </p>
+                    </div>
+
                     <form id="form-zalo-config" class="form-vertical-flow">
                       <div class="switch-field-row">
                         <div>
-                          <strong class="switch-main-title">Bật tính năng gửi tin nhắn Zalo</strong>
-                          <span class="switch-sub-desc">Gửi thông báo cảnh báo trực tiếp đến Zalo người mắc lỗi</span>
+                          <strong class="switch-main-title">Bật hệ thống Thông Báo Đẩy (Push Notification)</strong>
+                          <span class="switch-sub-desc">Gửi thông báo cảnh báo tức thời tới màn hình thiết bị của người mắc lỗi</span>
                         </div>
                         <input type="checkbox" id="zalo-cfg-enabled" checked class="soft-checkbox" />
                       </div>
 
                       <div class="switch-field-row">
                         <div>
+                          <strong class="switch-main-title">Âm thanh chuông báo động y tế</strong>
+                          <span class="switch-sub-desc">Phát chuông báo động Web Audio khi có lỗi HSBA được chuyển đến</span>
+                        </div>
+                        <input type="checkbox" id="push-cfg-sound" checked class="soft-checkbox" />
+                      </div>
+
+                      <div class="switch-field-row">
+                        <div>
                           <strong class="switch-main-title">Tự động nhắc lại định kỳ</strong>
-                          <span class="switch-sub-desc">Tự động gửi tin nhắn nhắc nhở 2 giờ một lần</span>
+                          <span class="switch-sub-desc">Tự động gửi thông báo đẩy nhắc nhở định kỳ cho đến khi lỗi được sửa</span>
                         </div>
                         <input type="checkbox" id="zalo-cfg-auto" checked class="soft-checkbox" />
                       </div>
@@ -571,27 +627,31 @@
                       </div>
 
                       <div class="form-unit-group">
-                        <label class="form-unit-label">Tên người gửi / Zalo Official Account:</label>
+                        <label class="form-unit-label">Tên đơn vị gửi thông báo:</label>
                         <input type="text" id="zalo-cfg-oaname" class="soft-form-control" value="Tổ Rà Soát HSBA - Bệnh Viện" />
                       </div>
 
                       <div class="form-unit-group">
-                        <label class="form-unit-label">Zalo OA ID / Webhook (Tùy chọn kết nối API):</label>
-                        <input type="text" id="zalo-cfg-oaid" class="soft-form-control" placeholder="ZALO_OA_HSBA_2026" />
+                        <label class="form-unit-label">Mẫu tiêu đề thông báo đẩy:</label>
+                        <input type="text" id="push-cfg-title-template" class="soft-form-control" value="🚨 [CẢNH BÁO HSBA] {tenBenhNhan} - {mucDoCanhBao}" />
+                        <span class="form-unit-helper">Hỗ trợ các thẻ: {tenBenhNhan}, {maKCB}, {mucDoCanhBao}, {khoaPhong}</span>
                       </div>
 
                       <div class="form-unit-group">
-                        <label class="form-unit-label">Mẫu tin nhắn Zalo gửi đi:</label>
+                        <label class="form-unit-label">Mẫu nội dung thông báo đẩy:</label>
                         <textarea id="zalo-cfg-template" class="soft-form-control" style="height: 80px;"></textarea>
                         <span class="form-unit-helper">Hỗ trợ các thẻ: {nguoiNhan}, {khoaPhong}, {tenBenhNhan}, {maKCB}, {thoiGianYL}, {mucDoCanhBao}, {dienGiaiLoi}, {trangThaiLoi}</span>
                       </div>
 
                       <div class="form-actions-row">
-                        <button type="submit" class="btn btn-zalo">
-                          <span>💾 Lưu cấu hình Zalo</span>
+                        <button type="submit" class="btn btn-primary">
+                          <span>💾 Lưu cấu hình Thông Báo Đẩy</span>
                         </button>
-                        <button type="button" class="btn btn-outline" id="btn-trigger-batch-zalo">
-                          <span>⚡ Kích hoạt gửi nhắc ngay</span>
+                        <button type="button" class="btn btn-outline" id="btn-test-push-notification">
+                          <span>🔔 Gửi thử nghiệm trên thiết bị này</span>
+                        </button>
+                        <button type="button" class="btn btn-secondary" id="btn-trigger-batch-zalo">
+                          <span>⚡ Bắn thông báo ngay cho ca chưa sửa</span>
                         </button>
                       </div>
                     </form>
@@ -600,29 +660,34 @@
 
                 <div class="soft-card-panel">
                   <div class="panel-header-strip">
-                    <h4 class="panel-header-title">Quy trình Gửi Thông Báo Tự Động</h4>
+                    <h4 class="panel-header-title">Quy trình Thông Báo Đẩy Tức Thời</h4>
                   </div>
                   <div class="panel-body-area clinical-flow-guide">
                     <div class="guide-item">
                       <span class="guide-badge-num">1</span>
-                      <p><strong>Báo cáo lỗi:</strong> Hệ thống tự động gửi tin nhắn Zalo cảnh báo đầu tiên cho Bác sĩ mắc lỗi.</p>
+                      <p><strong>Báo cáo lỗi:</strong> Hệ thống tức thời bắn Push Notification đến màn hình desktop/điện thoại của Bác sĩ chỉ định kèm chuông cảnh báo y tế.</p>
                     </div>
                     <div class="guide-item">
                       <span class="guide-badge-num">2</span>
-                      <p><strong>Nhắc lại 2 giờ/lần:</strong> Tự động nhắc nhở nếu lỗi vẫn ở trạng thái <code>CHƯA SỬA</code> hoặc <code>ĐÃ XEM - ĐANG SỬA</code>.</p>
+                      <p><strong>Trung tâm thông báo:</strong> Biểu tượng chuông 🔔 ở góc trên nhảy số đỏ và lưu trữ trong Hòm thư thông báo của từng nhân viên.</p>
                     </div>
                     <div class="guide-item">
                       <span class="guide-badge-num">3</span>
-                      <p><strong>Tự động dừng:</strong> Khi lỗi chuyển sang <strong>ĐÃ XONG</strong> hoặc hồ sơ được <strong>Chốt thông cổng</strong>, hệ thống tự động dừng chu kỳ gửi tin.</p>
+                      <p><strong>Nhắc lại định kỳ:</strong> Tự động nhắc nhở (2 giờ/lần) nếu lỗi vẫn ở trạng thái <code>CHƯA SỬA</code> hoặc <code>ĐÃ XEM - ĐANG SỬA</code>.</p>
+                    </div>
+                    <div class="guide-item">
+                      <span class="guide-badge-num">4</span>
+                      <p><strong>Tự động dừng:</strong> Khi lỗi chuyển sang <strong>ĐÃ XONG</strong> hoặc hồ sơ được <strong>Chốt thông cổng</strong>, hệ thống tự động ngắt chu kỳ nhắc nhở.</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <!-- Zalo Logs Table -->
+              <!-- Push Logs Table -->
               <div class="soft-card-panel" style="margin-top: 1rem;">
-                <div class="panel-header-strip">
-                  <h4 class="panel-header-title">Nhật ký Tin nhắn Zalo đã Gửi</h4>
+                <div class="panel-header-strip flex-between">
+                  <h4 class="panel-header-title">Nhật ký Thông Báo Đẩy (Push Delivery Logs)</h4>
+                  <button type="button" class="btn btn-outline btn-xs" id="btn-refresh-push-logs">🔄 Làm mới</button>
                 </div>
                 <div class="table-panel">
                   <table class="clinical-data-table">
@@ -630,10 +695,11 @@
                       <tr>
                         <th style="width: 40px;" class="text-center">#</th>
                         <th style="width: 140px;">Thời gian</th>
-                        <th style="width: 200px;">Người nhận & Zalo/SĐT</th>
-                        <th style="width: 190px;">Bệnh nhân & Khoa</th>
-                        <th style="width: 120px;" class="text-center">Phân loại</th>
-                        <th>Nội dung tin nhắn</th>
+                        <th style="width: 200px;">Người nhận & Khoa</th>
+                        <th style="width: 190px;">Bệnh nhân & Mã KCB</th>
+                        <th style="width: 130px;" class="text-center">Mức độ cảnh báo</th>
+                        <th>Nội dung thông báo đẩy</th>
+                        <th style="width: 110px;" class="text-center">Trạng thái</th>
                       </tr>
                     </thead>
                     <tbody id="settings-zalo-logs-body"></tbody>
@@ -740,7 +806,7 @@
             <div id="settings-sec-staff" class="settings-pane" style="display: none;">
               <div class="soft-card-panel">
                 <div class="panel-header-strip flex-between">
-                  <h4 class="panel-header-title">Danh sách Bác sĩ / Điều dưỡng & Tài khoản Zalo</h4>
+                  <h4 class="panel-header-title">Danh sách Bác sĩ / Điều dưỡng & Tài khoản Nhận Thông Báo</h4>
                   <button class="btn btn-primary btn-sm" id="btn-add-staff">+ Thêm Nhân viên mới</button>
                 </div>
                 <div class="table-panel">
@@ -752,7 +818,7 @@
                         <th style="width: 190px;">Khoa / Phòng</th>
                         <th style="width: 150px;">Chức danh</th>
                         <th style="width: 120px;">Số ĐT</th>
-                        <th style="width: 130px;">Zalo ID</th>
+                        <th style="width: 140px;">Thông Báo Đẩy</th>
                         <th style="width: 150px;">Vai trò mặc định</th>
                         <th style="width: 90px;" class="text-center">Thao tác</th>
                       </tr>

@@ -127,12 +127,14 @@ class SupabaseService {
       trang_thai_loi: r.trangThaiLoi || 'CHƯA SỬA',
       y_kien_nguoi_sua: r.yKienNguoiSua || '',
       nguoi_kiem_tra: r.nguoiKiemTra || '',
-      so_lan_gui_zalo: r.soLanGuiZalo || r.zaloSentCount || 0,
-      thoi_gian_gui_zalo_gan_nhat: r.thoiGianGuiZaloGanNhat || r.lastZaloSentAt || null
+      so_lan_gui_zalo: r.pushSentCount || r.soLanGuiZalo || r.zaloSentCount || 0,
+      thoi_gian_gui_zalo_gan_nhat: r.lastPushSentAt || r.thoiGianGuiZaloGanNhat || r.lastZaloSentAt || null
     };
   }
 
   dbToRecord(row) {
+    const pushCount = row.so_lan_gui_zalo ?? row.soLanGuiZalo ?? row.pushSentCount ?? 0;
+    const lastPushAt = row.thoi_gian_gui_zalo_gan_nhat || row.thoiGianGuiZaloGanNhat || row.lastPushSentAt || null;
     return {
       id: row.id,
       maKCB: row.ma_kcb || row.maKCB || '',
@@ -149,10 +151,12 @@ class SupabaseService {
       trangThaiLoi: row.trang_thai_loi || row.trangThaiLoi || 'CHƯA SỬA',
       yKienNguoiSua: row.y_kien_nguoi_sua || row.yKienNguoiSua || '',
       nguoiKiemTra: row.nguoi_kiem_tra || row.nguoiKiemTra || '',
-      soLanGuiZalo: row.so_lan_gui_zalo ?? row.soLanGuiZalo ?? 0,
-      thoiGianGuiZaloGanNhat: row.thoi_gian_gui_zalo_gan_nhat || row.thoiGianGuiZaloGanNhat || null,
-      zaloSentCount: row.so_lan_gui_zalo ?? row.soLanGuiZalo ?? 0,
-      lastZaloSentAt: row.thoi_gian_gui_zalo_gan_nhat || row.thoiGianGuiZaloGanNhat || null
+      pushSentCount: pushCount,
+      lastPushSentAt: lastPushAt,
+      soLanGuiZalo: pushCount,
+      thoiGianGuiZaloGanNhat: lastPushAt,
+      zaloSentCount: pushCount,
+      lastZaloSentAt: lastPushAt
     };
   }
 
@@ -254,7 +258,8 @@ class SupabaseService {
     try {
       const { data, error } = await this.client.from('records').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map(r => this.dbToRecord(r));
+      const mockRecIds = ['REC-1001', 'REC-1002', 'REC-1003', 'REC-1004'];
+      return (data || []).map(r => this.dbToRecord(r)).filter(r => !mockRecIds.includes(r.id));
     } catch (e) {
       console.warn('Lỗi khi fetch records từ Supabase:', e);
       return null;
@@ -292,7 +297,8 @@ class SupabaseService {
     try {
       const { data, error } = await this.client.from('discharge_reports').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map(r => this.dbToDischarge(r));
+      const mockRepIds = ['BCRV-2026-001', 'BCRV-2026-002', 'BCRV-2026-003'];
+      return (data || []).map(r => this.dbToDischarge(r)).filter(r => !mockRepIds.includes(r.id));
     } catch (e) {
       console.warn('Lỗi khi fetch discharge_reports từ Supabase:', e);
       return null;
@@ -381,7 +387,8 @@ class SupabaseService {
     try {
       const { data, error } = await this.client.from('staff').select('*').order('created_at', { ascending: true });
       if (error) throw error;
-      return (data || []).map(s => this.dbToStaff(s));
+      const legacyMockStaffIds = ['NV00', 'NV01', 'NV02', 'NV03', 'NV04', 'NV08', 'NV09', 'NV10', 'NV11', 'NV13'];
+      return (data || []).map(s => this.dbToStaff(s)).filter(s => !legacyMockStaffIds.includes(s.id) && !(s.name && s.name.includes('Trần Thị Mai')));
     } catch (e) {
       console.warn('Lỗi khi fetch staff từ Supabase:', e);
       return null;

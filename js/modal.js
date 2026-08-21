@@ -7,7 +7,7 @@
  */
 
 import { storage } from './storage.js';
-import { zaloService } from './zaloService.js';
+import { notificationService } from './notificationService.js';
 import { MUC_DO_CANH_BAO, TRANG_THAI_KIEM_DUYET, TRANG_THAI_LOI } from './data.js';
 import { showToast, getTodayDateString, getNowDateTimeString, escapeHtml, printRecordSheet, formatDateTimeVN, formatDateVN, getMucDoLoiBadge } from './utils.js';
 
@@ -121,7 +121,7 @@ export class ModalController {
             <datalist id="dl-add-staff">
               ${staffOptions}
             </datalist>
-            <small class="form-help text-xs text-muted" style="margin-top: 3px;">Gõ trực tiếp tên bác sĩ hoặc chọn nhanh từ danh mục để hệ thống gửi Zalo tự động</small>
+            <small class="form-help text-xs text-muted" style="margin-top: 3px;">Gõ trực tiếp tên bác sĩ hoặc chọn nhanh từ danh mục để hệ thống bắn Push Notification tự động</small>
           </div>
 
           <!-- 5. Ngày vào khoa -->
@@ -167,7 +167,7 @@ export class ModalController {
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-add">Hủy bỏ</button>
           <button type="submit" class="btn btn-primary" id="btn-submit-add">
-            <span>💾 Lưu & Gửi Zalo nhắc nhở</span>
+            <span>💾 Lưu & Bắn Thông Báo Đẩy</span>
           </button>
         </div>
       </form>
@@ -252,15 +252,15 @@ export class ModalController {
         trangThaiKiemDuyet: mucDoLoi,
         trangThaiLoi: 'CHƯA SỬA',
         yKienNguoiSua: '',
-        zaloSentCount: 0,
-        lastZaloSentAt: null,
-        zaloHistory: []
+        pushSentCount: 0,
+        lastPushSentAt: null,
+        pushHistory: []
       });
 
       if (nguoiChiDinh) {
-        const zaloResult = zaloService.sendZaloNotification(newRecord.id, true);
-        if (zaloResult.success && zaloResult.target) {
-          showToast(`Đã thêm lỗi và gửi tin Zalo cảnh báo tới ${nguoiChiDinh}! Nhắc lại sau mỗi 2 giờ.`, 'success', 5000);
+        const pushResult = notificationService.sendPushNotification(newRecord.id, true);
+        if (pushResult.success) {
+          showToast(`Đã thêm lỗi và bắn Push Notification cảnh báo tới ${nguoiChiDinh}! Nhắc lại sau mỗi 2 giờ.`, 'success', 5000);
         } else {
           showToast(`Đã thêm lỗi cho bệnh nhân ${tenBenhNhan}.`, 'success');
         }
@@ -1004,24 +1004,28 @@ export class ModalController {
   }
 
   // ==========================================
-  // 6. CÁC MODAL KHÁC (ZALO, DEPT, STAFF, QUICK STATUS, CONFIRM)
+  // 6. CÁC MODAL KHÁC (PUSH NOTIFICATION, DEPT, STAFF, QUICK STATUS, CONFIRM)
   // ==========================================
   openZaloMessageModal(recordId) {
+    this.openPushNotificationModal(recordId);
+  }
+
+  openPushNotificationModal(recordId) {
     const record = storage.getRecords().find(r => r.id === recordId);
     if (!record) return;
 
     const staffList = storage.getStaff();
     const staff = staffList.find(s => s.name === record.nguoiChiDinh);
-    const target = zaloService.getRecipientTarget(record);
-    const chatUrl = zaloService.getZaloChatUrl(target);
-    const message = zaloService.generateZaloMessage(record, staff);
+    const target = notificationService.getRecipientTarget(record);
+    const message = notificationService.generatePushMessage(record, staff);
+    const pushTitle = notificationService.generatePushTitle(record);
 
     const html = `
       <div class="modal-header">
         <div class="modal-header-title">
-          <span class="modal-icon-badge" style="color: #0068FF;">💬</span>
+          <span class="modal-icon-badge" style="color: #4f46e5; background: #eef2ff;">🔔</span>
           <div>
-            <h3>Nhắn tin Zalo cảnh báo & Nhắc nhở lỗi</h3>
+            <h3>Bắn Thông Báo Đẩy (Push Notification) Cảnh Báo Lỗi</h3>
             <p class="modal-subtitle">Gửi cho: <strong>${escapeHtml(record.nguoiChiDinh || '---')}</strong> (${escapeHtml(target.label)})</p>
           </div>
         </div>
@@ -1029,42 +1033,53 @@ export class ModalController {
       </div>
 
       <div class="modal-form">
-        <div class="zalo-chat-bubble">
-          <div class="zalo-bubble-header">
-            <span>💬 ZALO BỆNH VIỆN - RÀ SOÁT HSBA</span>
-            <span>Vừa xong</span>
+        <!-- Live Desktop / Browser Notification Simulation Preview Card -->
+        <div class="push-notification-preview-card">
+          <div class="push-preview-header">
+            <div class="push-preview-app-info">
+              <span class="push-preview-icon">🏥</span>
+              <strong>HỆ THỐNG RÀ SOÁT HSBA</strong>
+              <span class="push-preview-time">• Vừa xong</span>
+            </div>
+            <span class="push-preview-badge">Web Push</span>
           </div>
-          <div class="zalo-bubble-body">${escapeHtml(message).replace(/\n/g, '<br>')}</div>
+          <div class="push-preview-title">${escapeHtml(pushTitle)}</div>
+          <div class="push-preview-body">${escapeHtml(message).replace(/\n/g, '<br>')}</div>
+        </div>
+
+        <div class="push-details-alert-box" style="margin-top: 12px; padding: 10px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+          <div class="text-xs text-muted">
+            🔔 <strong>Cơ chế đẩy:</strong> Khi bấm gửi, thông báo sẽ kích hoạt đồng thời <strong>Web Notification trên màn hình</strong>, <strong>chuông âm thanh y tế</strong>, và lưu vào <strong>Hộp thư thông báo</strong> của nhân viên.
+          </div>
         </div>
 
         <div class="modal-footer" style="margin-top: 16px;">
-          <button type="button" class="btn btn-secondary" id="btn-zalo-close">Đóng</button>
-          <button type="button" class="btn btn-outline" id="btn-copy-zalo">📋 Sao chép tin</button>
-          ${chatUrl ? `<a href="${chatUrl}" target="_blank" class="btn btn-zalo">💬 Mở Chat Zalo</a>` : ''}
-          <button type="button" class="btn btn-primary" id="btn-send-zalo-now">📨 Gửi nhắc Zalo</button>
+          <button type="button" class="btn btn-secondary" id="btn-push-close">Đóng</button>
+          <button type="button" class="btn btn-outline" id="btn-copy-push">📋 Sao chép nội dung</button>
+          <button type="button" class="btn btn-primary" id="btn-send-push-now">🔔 Bắn Thông Báo Đẩy Ngay</button>
         </div>
       </div>
     `;
 
     this.renderModal(html, 'modal-md');
     document.getElementById('btn-modal-close').onclick = () => this.closeModal();
-    document.getElementById('btn-zalo-close').onclick = () => this.closeModal();
+    document.getElementById('btn-push-close').onclick = () => this.closeModal();
 
-    const btnCopy = document.getElementById('btn-copy-zalo');
+    const btnCopy = document.getElementById('btn-copy-push');
     if (btnCopy) {
       btnCopy.onclick = () => {
-        navigator.clipboard.writeText(message).then(() => {
-          showToast('Đã sao chép nội dung tin nhắn Zalo!', 'success');
+        navigator.clipboard.writeText(`${pushTitle}\n\n${message}`).then(() => {
+          showToast('Đã sao chép nội dung thông báo đẩy!', 'success');
         });
       };
     }
 
-    const btnSendNow = document.getElementById('btn-send-zalo-now');
+    const btnSendNow = document.getElementById('btn-send-push-now');
     if (btnSendNow) {
       btnSendNow.onclick = () => {
-        const result = zaloService.sendZaloNotification(record.id, false);
+        const result = notificationService.sendPushNotification(record.id, false);
         if (result.success) {
-          showToast(`Đã gửi tin Zalo cho ${record.nguoiChiDinh}!`, 'success');
+          showToast(`🔔 Đã bắn Thông Báo Đẩy cảnh báo tới ${record.nguoiChiDinh || 'nhân viên'}!`, 'success');
           this.closeModal();
           this.app.refreshAllViews();
         } else {
@@ -1110,7 +1125,7 @@ export class ModalController {
           <select id="quick-trangThaiLoi" class="form-select highlight-select" required>
             <option value="CHƯA SỬA" ${record.trangThaiLoi === 'CHƯA SỬA' ? 'selected' : ''}>🔴 CHƯA SỬA</option>
             <option value="ĐÃ XEM - ĐANG SỬA" ${record.trangThaiLoi === 'ĐÃ XEM - ĐANG SỬA' ? 'selected' : ''}>🟠 ĐÃ XEM - ĐANG SỬA</option>
-            <option value="ĐÃ XONG" ${record.trangThaiLoi === 'ĐÃ XONG' ? 'selected' : ''}>🟢 ĐÃ XONG (Dừng gửi tin Zalo)</option>
+            <option value="ĐÃ XONG" ${record.trangThaiLoi === 'ĐÃ XONG' ? 'selected' : ''}>🟢 ĐÃ XONG (Dừng thông báo đẩy)</option>
             <option value="HỦY CHUYỂN VIỆN" ${record.trangThaiLoi === 'HỦY CHUYỂN VIỆN' ? 'selected' : ''}>⚪ HỦY CHUYỂN VIỆN</option>
             <option value="KHÁC" ${record.trangThaiLoi === 'KHÁC' ? 'selected' : ''}>⚙️ KHÁC</option>
           </select>
@@ -1230,12 +1245,12 @@ export class ModalController {
         </div>
         <div class="form-grid" style="margin-top: 10px;">
           <div class="form-group">
-            <label class="form-label">Số điện thoại:</label>
-            <input type="tel" id="staff-phone" class="form-input" value="${escapeHtml(staffMember ? (staffMember.phone || '') : '')}" />
+            <label class="form-label">Số điện thoại liên hệ:</label>
+            <input type="tel" id="staff-phone" class="form-input" value="${escapeHtml(staffMember ? (staffMember.phone || '') : '')}" placeholder="0901234567" />
           </div>
           <div class="form-group">
-            <label class="form-label">Zalo Username / ID:</label>
-            <input type="text" id="staff-zalo-id" class="form-input" value="${escapeHtml(staffMember ? (staffMember.zaloId || '') : '')}" />
+            <label class="form-label">Mã định danh nhận Push:</label>
+            <input type="text" id="staff-zalo-id" class="form-input" value="${escapeHtml(staffMember ? (staffMember.zaloId || '') : '')}" placeholder="BS_${escapeHtml(staffMember ? staffMember.name.split(' ').pop().toUpperCase() : 'HSBA')}" />
           </div>
         </div>
         <div class="form-group" style="margin-top: 10px;">
