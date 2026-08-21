@@ -177,33 +177,25 @@ export class StorageService {
     const staffList = this.getStaff();
 
     // Tìm theo username, số điện thoại, mã nhân viên (id), tên, hoặc role
-    let staff = staffList.find(s => 
+    // Tìm chính xác theo username, số điện thoại, mã nhân viên (id) hoặc tên
+    const staff = staffList.find(s => 
       (s.username && s.username.toLowerCase() === cleanUser) ||
       (s.phone && s.phone.replace(/[^0-9]/g, '') === cleanUser.replace(/[^0-9]/g, '') && cleanUser.length >= 8) ||
       (s.id && s.id.toLowerCase() === cleanUser) ||
       (s.name && s.name.toLowerCase() === cleanUser)
     );
 
-    // Đặc quyền Quản trị viên (Admin): luôn đảm bảo tài khoản admin hoạt động mọi lúc
-    if (!staff && (cleanUser === 'admin' || cleanUser === 'nv_admin' || cleanUser === 'administrator')) {
-      staff = staffList.find(s => s.defaultRole === 'ADMIN') || DEFAULT_STAFF[0];
-    }
-
     if (!staff) {
-      return { success: false, message: 'Tài khoản không tồn tại trong hệ thống! (Tài khoản Admin mặc định: admin)' };
+      return { success: false, message: 'Tài khoản không tồn tại trong hệ thống!' };
     }
 
-    // Kiểm tra mật khẩu: chấp nhận mật khẩu đã lưu, hoặc các mật khẩu chuẩn '123', 'admin', 'admin123', '123456'
-    const expectedPass = staff.password || '123';
-    const isPassValid = !cleanPass || 
-      cleanPass === expectedPass || 
-      cleanPass === '123' || 
-      cleanPass === 'admin' || 
-      cleanPass === 'admin123' || 
-      cleanPass === '123456';
+    // Kiểm tra chính xác mật khẩu của tài khoản đó
+    const expectedPass = staff.password !== undefined && staff.password !== null && staff.password !== '' 
+      ? String(staff.password).trim() 
+      : '123';
 
-    if (!isPassValid) {
-      return { success: false, message: 'Mật khẩu không chính xác! (Mật khẩu mặc định: 123)' };
+    if (cleanPass !== expectedPass) {
+      return { success: false, message: 'Mật khẩu không chính xác!' };
     }
 
     this.setCurrentUser(staff);
