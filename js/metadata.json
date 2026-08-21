@@ -1,0 +1,10 @@
+{
+  "name": "Remix hsba",
+  "description": "Hệ thống theo dõi rà soát hồ sơ bệnh án, báo cáo chốt ra viện các khâu chuyên môn, kiểm soát lỗi điều kiện 1 & 2 và thống kê người phạm lỗi - BV Hữu Nghị Đa Khoa Nghệ An",
+  "requestFramePermissions": [
+    "notifications"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

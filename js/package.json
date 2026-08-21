@@ -1,0 +1,23 @@
+{
+  "name": "theo-doi-hsba-bvhndk-nghean",
+  "version": "5.0.0",
+  "type": "module",
+  "description": "Hệ thống Quản lý và Theo dõi HSBA Bệnh Viện Hữu Nghị Đa Khoa Nghệ An - Giai đoạn 2",
+  "scripts": {
+    "dev": "node server.js",
+    "build": "echo \"Build complete\"",
+    "start": "node server.js"
+  },
+  "keywords": [
+    "hsba",
+    "benh-an",
+    "nghe-an",
+    "supabase",
+    "medical"
+  ],
+  "author": "BV HNĐK Nghệ An",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}
