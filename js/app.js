@@ -17,6 +17,8 @@ import { ModalController } from './modal.js';
 import {
   formatDateVN,
   formatDateTimeVN,
+  formatDischargeDateTimeVN,
+  getDefaultDischargeDateTime,
   removeVietnameseTones,
   getMucDoLoiBadge,
   getWarningBadge,
@@ -25,7 +27,10 @@ import {
   showToast,
   exportRecordsToCSV,
   escapeHtml,
-  getTodayDateString
+  getTodayDateString,
+  computeDashboardStats,
+  exportDashboardToExcel,
+  printDashboardReportPDF
 } from './utils.js';
 
 class App {
@@ -46,16 +51,17 @@ class App {
     };
 
     // Bộ lọc Báo cáo ra viện
+    const today = getTodayDateString();
     this.dischargeFilters = {
       keyword: '',
       dept: '',
       gate: '',
-      date: getTodayDateString()
+      date: today
     };
 
-    // Quản lý các dòng nhập nhanh nhiều ca trực tiếp (Batch Inline Rows) - Mặc định 1 dòng ban đầu
+    // Quản lý các dòng nhập nhanh nhiều ca trực tiếp (Batch Inline Rows) - Mặc định 1 dòng ban đầu với Ngày ra viện mặc định 8h30 ngày N+1
     this.batchRows = [
-      { id: 1, maKCB: '', tenBenhNhan: '', tenBacSi: '' }
+      { id: 1, maKCB: '', tenBenhNhan: '', tenBacSi: '', ngayRaVien: getDefaultDischargeDateTime(today) }
     ];
     this.nextBatchRowId = 2;
 
@@ -64,6 +70,24 @@ class App {
     this.pageSize = 15;
     this.sortBy = 'ngayCapNhat';
     this.sortOrder = 'desc';
+
+    // Dashboard State & Time Filtering
+    this.dashboardConditionFilter = 'ALL'; // 'ALL' | 'DK1' | 'DK2'
+    this.violatorViewMode = 'DOCTOR'; // 'DOCTOR' | 'DEPT'
+    this.expandedViolators = new Set();
+    this.dashboardStats = null;
+
+    // Time Filtering (Theo Ngày, Tháng, Năm, Tất cả)
+    this.dashboardTimeMode = 'DAY'; // 'DAY' | 'MONTH' | 'YEAR' | 'ALL'
+    this.dashboardTimeValue = today; // YYYY-MM-DD, YYYY-MM, or YYYY
+
+    // Section 5 Comparison Chart State
+    this.chartEntityMode = 'DEPT'; // 'DEPT' | 'DOCTOR'
+    this.chartVisualType = 'bar'; // 'bar' | 'hbar' | 'line'
+    this.selectedChartMetrics = new Set(['totalDischarge', 'passedDischarge', 'dk1Count', 'dk2Count', 'unresolvedErrors']);
+    this.selectedChartEntities = new Set();
+    this.chartInstance = null;
+    this.isChartTableExpanded = false;
 
     this.init();
   }
@@ -194,24 +218,6 @@ class App {
 
     const dashGreeting = document.getElementById('dash-greeting-title');
     if (dashGreeting) dashGreeting.textContent = `Chào buổi làm việc, ${user.name} 👋`;
-
-    // Dropdown chuyển nhanh tài khoản người dùng
-    const switchSelect = document.getElementById('header-switch-user-select');
-    if (switchSelect) {
-      const staffList = storage.getStaff();
-      switchSelect.innerHTML = staffList.map(s => {
-        const r = ROLES[s.defaultRole] || ROLES.NHOM_2;
-        return `<option value="${s.id}" ${s.id === user.id ? 'selected' : ''}>${s.avatarEmoji || '👤'} ${escapeHtml(s.name)} (${escapeHtml(r.shortName || r.name)} - ${escapeHtml(s.department)})</option>`;
-      }).join('');
-
-      switchSelect.onchange = (e) => {
-        const staffId = e.target.value;
-        const res = storage.loginAsStaff(staffId);
-        if (res.success) {
-          this.handleLoginSuccess(res.user);
-        }
-      };
-    }
 
     const btnLogout = document.getElementById('btn-header-logout');
     if (btnLogout) {
@@ -661,6 +667,36 @@ class App {
         this.renderDischargeView();
       };
     }
+
+    // Sự kiện phần Tổng quan Dashboard
+    const btnDashExcel = document.getElementById('btn-dash-export-excel');
+    if (btnDashExcel) {
+      btnDashExcel.onclick = () => this.exportDashboardExcel();
+    }
+
+    const btnDashPdf = document.getElementById('btn-dash-export-pdf');
+    if (btnDashPdf) {
+      btnDashPdf.onclick = () => this.exportDashboardPDF();
+    }
+
+    const btnRefreshDash = document.getElementById('btn-refresh-dashboard');
+    if (btnRefreshDash) {
+      btnRefreshDash.onclick = () => {
+        this.renderDashboardView();
+        showToast('Đã làm mới dữ liệu thống kê Dashboard!', 'success');
+      };
+    }
+
+    const chartEntitySearch = document.getElementById('chart-entity-search');
+    if (chartEntitySearch) {
+      let entitySearchTimer;
+      chartEntitySearch.addEventListener('input', () => {
+        clearTimeout(entitySearchTimer);
+        entitySearchTimer = setTimeout(() => {
+          this.renderChartEntityCheckboxes();
+        }, 120);
+      });
+    }
   }
 
   // Reset bộ lọc về mặc định (trở về chế độ 10 ngày gần đây)
@@ -783,14 +819,13 @@ class App {
       ringDetailLabel.textContent = `${daXong}/${total} hồ sơ đạt`;
     }
 
-    // 2. Cập nhật thống kê 4 khâu mini ở cột phải
+    // 2. Cập nhật thống kê các khâu mini ở cột phải
     const widgetStepsContainer = document.getElementById('widget-steps-list');
     if (widgetStepsContainer) {
       const steps = [
         { key: 'kiemDuoc', name: 'Dược', icon: '💊' },
         { key: 'kiemKeToanBH', name: 'Kế toán BH', icon: '💵' },
-        { key: 'kiemKHTH', name: 'KHTH', icon: '📋' },
-        { key: 'kiemIT', name: 'IT', icon: '💻' }
+        { key: 'kiemKHTH', name: 'KHTH', icon: '📋' }
       ];
       widgetStepsContainer.innerHTML = steps.map(s => {
         const errorCount = dischargeReports.filter(r => r[s.key] && r[s.key].status === 'CO_LOI').length;
@@ -877,8 +912,13 @@ class App {
       records = records.filter(r => r.ngayKiemHoSo <= this.filters.toNgayKiem);
     }
 
-    // Ưu tiên lỗi chưa hoàn thành lên trên
+    // Sắp xếp: Theo từng Khoa/Phòng trước (A-Z), trong mỗi khoa ưu tiên lỗi chưa hoàn thành lên trên
     records.sort((a, b) => {
+      const deptA = (a.khoaPhong || '').trim();
+      const deptB = (b.khoaPhong || '').trim();
+      const deptCompare = deptA.localeCompare(deptB, 'vi', { sensitivity: 'base' });
+      if (deptCompare !== 0) return deptCompare;
+
       const isUnresolvedA = (a.trangThaiLoi !== 'ĐÃ XONG' && a.trangThaiKiemDuyet !== 'ĐÃ SỬA' && !a.chotRaVien) ? 0 : 1;
       const isUnresolvedB = (b.trangThaiLoi !== 'ĐÃ XONG' && b.trangThaiKiemDuyet !== 'ĐÃ SỬA' && !b.chotRaVien) ? 0 : 1;
 
@@ -929,9 +969,9 @@ class App {
         emptyHtml = `
           <div class="empty-state">
             <div class="empty-icon">📋</div>
-            <h4>Chưa có bản ghi lỗi HSBA nào</h4>
-            <p>Hệ thống sạch và sẵn sàng. Bấm nút <strong>+ Báo cáo lỗi mới</strong> ở góc trên để bắt đầu thêm hồ sơ rà soát.</p>
-            ${storage.canAddRecord() ? '<button class="btn btn-primary" onclick="window.hsbaApp.modalController.openAddErrorModal()" style="margin-top: 8px;">+ Báo cáo lỗi mới</button>' : ''}
+            <h4>Chưa có hồ sơ rà soát nào</h4>
+            <p>Hệ thống sạch và sẵn sàng. Bấm nút <strong>Thêm hồ sơ rà soát</strong> ở góc trên để bắt đầu thêm hồ sơ rà soát.</p>
+            ${storage.canAddRecord() ? '<button class="btn btn-primary" onclick="window.hsbaApp.modalController.openAddErrorModal()" style="margin-top: 8px;">+ Thêm hồ sơ rà soát</button>' : ''}
           </div>
         `;
       } else {
@@ -1040,11 +1080,11 @@ class App {
             </div>
 
             <div class="card-meta-grid">
-              <div>🏥 <strong>${escapeHtml(r.khoaPhong)}</strong></div>
-              <div>👤 <strong>${escapeHtml(r.nguoiChiDinh || '---')}</strong></div>
-              <div>📅 Vào khoa: <strong>${formatDateVN(r.ngayVaoKhoa)}</strong></div>
-              <div>🔍 Kiểm HS: <strong>${formatDateVN(r.ngayKiemHoSo)}</strong></div>
-              <div style="grid-column: 1 / -1;">⏰ Y lệnh: <strong>${escapeHtml(r.thoiGianChiDinhYL || '---')}</strong></div>
+              <div><span class="meta-label">🏥 Khoa:</span> <strong>${escapeHtml(r.khoaPhong)}</strong></div>
+              <div><span class="meta-label">👤 Bác sĩ:</span> <strong>${escapeHtml(r.nguoiChiDinh || '---')}</strong></div>
+              <div><span class="meta-label">📅 Vào khoa:</span> <strong>${formatDateVN(r.ngayVaoKhoa)}</strong></div>
+              <div><span class="meta-label">🔍 Kiểm HS:</span> <strong>${formatDateVN(r.ngayKiemHoSo)}</strong></div>
+              <div class="grid-col-full"><span class="meta-label">⏰ Y lệnh:</span> <strong>${escapeHtml(r.thoiGianChiDinhYL || '---')}</strong></div>
             </div>
 
             <div class="card-error-body">
@@ -1052,25 +1092,24 @@ class App {
               <p class="card-error-desc">${escapeHtml(r.dienGiaiLoi)}</p>
               ${r.yKienNguoiSua ? `
                 <div class="card-response-box">
-                  <strong>Ý kiến người sửa:</strong> ${escapeHtml(r.yKienNguoiSua)}
+                  <strong>💬 Ý kiến người sửa:</strong> ${escapeHtml(r.yKienNguoiSua)}
                 </div>
               ` : ''}
             </div>
 
             <div class="card-status-bar">
-              <div>
-                <span class="text-xs text-muted block">Trạng thái:</span>
-                ${getReviewStatusBadge(r.trangThaiKiemDuyet)}
-              </div>
-              <div>
-                <span class="text-xs text-muted block">Trạng thái lỗi:</span>
-                ${getErrorStatusBadge(r.trangThaiLoi)}
+              <div class="card-status-unit">
+                <span class="text-caption text-muted block" style="margin-bottom: 2px;">Tiến độ sửa lỗi:</span>
+                <button class="btn-status-trigger ${canEditGroup2 ? 'btn-status-active' : 'btn-status-readonly'}" onclick="window.hsbaApp.modalController.openQuickStatusModal('${r.id}')" title="${canEditGroup2 ? 'Bấm để cập nhật nhanh tiến độ sửa lỗi' : 'Xem tiến độ'}">
+                  ${getErrorStatusBadge(r.trangThaiLoi)}
+                  ${canEditGroup2 ? '<span class="btn-quick-edit-icon">✏️</span>' : ''}
+                </button>
               </div>
             </div>
 
             <div class="card-footer-actions">
-              <button class="btn btn-sm btn-outline flex-1" onclick="window.hsbaApp.modalController.openEditErrorModal('${r.id}')">
-                ✏️ Chi tiết / Chỉnh sửa
+              <button class="btn btn-sm btn-outline flex-1 btn-mobile-card-edit" onclick="window.hsbaApp.modalController.openEditErrorModal('${r.id}')">
+                ✏️ Chi tiết / Chỉnh sửa hồ sơ
               </button>
             </div>
           </div>
@@ -1098,12 +1137,14 @@ class App {
           Hiển thị <strong>${startIndex + 1} - ${Math.min(startIndex + this.pageSize, totalCount)}</strong> trong tổng số <strong>${totalCount}</strong> lỗi
         </div>
         <div class="pagination-controls">
-          <button class="btn-page-nav" ${this.currentPage === 1 ? 'disabled' : ''} onclick="window.hsbaApp.goToPage(${this.currentPage - 1})">
-            ◀ Trước
+          <button class="btn-page-nav" ${this.currentPage === 1 ? 'disabled' : ''} onclick="window.hsbaApp.goToPage(${this.currentPage - 1})" title="Trang trước">
+            <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor" style="width: 14px; height: 14px;"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+            <span>Trước</span>
           </button>
           <div class="page-numbers">${pageButtons}</div>
-          <button class="btn-page-nav" ${this.currentPage === totalPages ? 'disabled' : ''} onclick="window.hsbaApp.goToPage(${this.currentPage + 1})">
-            Sau ▶
+          <button class="btn-page-nav" ${this.currentPage === totalPages ? 'disabled' : ''} onclick="window.hsbaApp.goToPage(${this.currentPage + 1})" title="Trang tiếp">
+            <span>Sau</span>
+            <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor" style="width: 14px; height: 14px;"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
           </button>
         </div>
       `;
@@ -1141,8 +1182,20 @@ class App {
       };
     }
 
-    if (reportDateInput && !reportDateInput.value) {
-      reportDateInput.value = getTodayDateString();
+    if (reportDateInput) {
+      if (!reportDateInput.value) {
+        reportDateInput.value = getTodayDateString();
+      }
+
+      reportDateInput.onchange = (e) => {
+        const newReportDate = e.target.value;
+        const newDischargeDateTime = getDefaultDischargeDateTime(newReportDate);
+        // Tự động cập nhật thời gian ra viện mặc định cho các dòng
+        this.batchRows.forEach(r => {
+          r.ngayRaVien = newDischargeDateTime;
+        });
+        this.renderBatchRows();
+      };
     }
 
     this.renderBatchRows();
@@ -1154,8 +1207,12 @@ class App {
     if (!rowsBody) return;
 
     const activeDept = storage.getActiveDepartment();
+    const reportDateInput = document.getElementById('batch-report-date');
+    const currentReportDate = reportDateInput ? reportDateInput.value : getTodayDateString();
+    const defaultDischargeDateTime = getDefaultDischargeDateTime(currentReportDate);
 
     rowsBody.innerHTML = this.batchRows.map((row, idx) => {
+      const rowDischargeTime = row.ngayRaVien || defaultDischargeDateTime;
       return `
         <tr data-batch-id="${row.id}">
           <td class="text-center font-mono text-muted text-xs">${idx + 1}</td>
@@ -1170,6 +1227,10 @@ class App {
 
           <td>
             <input type="text" list="dl-nguoi-chi-dinh" class="batch-cell-input batch-input-doctor" placeholder="BS. điều trị..." value="${escapeHtml(row.tenBacSi)}" data-id="${row.id}" data-field="tenBacSi" />
+          </td>
+
+          <td>
+            <input type="datetime-local" class="batch-cell-input batch-input-datetime" value="${rowDischargeTime}" data-id="${row.id}" data-field="ngayRaVien" title="Ngày giờ ra viện (mặc định 8h30 ngày N+1)" />
           </td>
 
           <td>
@@ -1235,6 +1296,12 @@ class App {
               nextInput.select();
             }
           } else if (target.classList.contains('batch-input-doctor')) {
+            // Từ Tên Bác sĩ -> nhảy sang Ngày ra viện trong cùng hàng
+            const nextInput = tr.querySelector('.batch-input-datetime');
+            if (nextInput) {
+              nextInput.focus();
+            }
+          } else if (target.classList.contains('batch-input-datetime')) {
             // Đã xong hàng: Nhảy sang hàng tiếp theo hoặc tạo thêm hàng mới nếu là hàng cuối
             const nextTr = tr.nextElementSibling;
             if (nextTr) {
@@ -1264,8 +1331,18 @@ class App {
   }
 
   addBatchRow(shouldFocus = false) {
+    const reportDateInput = document.getElementById('batch-report-date');
+    const currentReportDate = reportDateInput ? reportDateInput.value : getTodayDateString();
+    const defaultDischargeDateTime = getDefaultDischargeDateTime(currentReportDate);
+
     const newId = this.nextBatchRowId++;
-    this.batchRows.push({ id: newId, maKCB: '', tenBenhNhan: '', tenBacSi: '' });
+    this.batchRows.push({
+      id: newId,
+      maKCB: '',
+      tenBenhNhan: '',
+      tenBacSi: '',
+      ngayRaVien: defaultDischargeDateTime
+    });
     this.renderBatchRows();
 
     if (shouldFocus) {
@@ -1287,10 +1364,12 @@ class App {
   saveBatchReports() {
     const reportDateInput = document.getElementById('batch-report-date');
     const ngayBaoCao = reportDateInput ? reportDateInput.value : getTodayDateString();
+    const defaultDischargeDateTime = getDefaultDischargeDateTime(ngayBaoCao);
     const activeDept = storage.getActiveDepartment();
 
     const validRows = this.batchRows.filter(r => r.maKCB.trim() && r.tenBenhNhan.trim()).map(r => ({
       ngayBaoCao,
+      ngayRaVien: r.ngayRaVien || defaultDischargeDateTime,
       maKCB: r.maKCB.trim(),
       tenBenhNhan: r.tenBenhNhan.trim(),
       tenBacSi: r.tenBacSi.trim(),
@@ -1307,7 +1386,13 @@ class App {
 
     // Reset lại 1 dòng trống ban đầu
     this.batchRows = [
-      { id: this.nextBatchRowId++, maKCB: '', tenBenhNhan: '', tenBacSi: '' }
+      {
+        id: this.nextBatchRowId++,
+        maKCB: '',
+        tenBenhNhan: '',
+        tenBacSi: '',
+        ngayRaVien: defaultDischargeDateTime
+      }
     ];
     this.renderBatchRows();
 
@@ -1361,8 +1446,13 @@ class App {
       reports = reports.filter(r => r.chotThongCong === this.dischargeFilters.gate);
     }
 
-    // Sắp xếp: Chưa đồng ý thông cổng lên trước
+    // Sắp xếp: Theo từng Khoa/Phòng trước (A-Z), trong mỗi khoa ưu tiên ca chưa thông cổng lên trước
     reports.sort((a, b) => {
+      const deptA = (a.phong || '').trim();
+      const deptB = (b.phong || '').trim();
+      const deptCompare = deptA.localeCompare(deptB, 'vi', { sensitivity: 'base' });
+      if (deptCompare !== 0) return deptCompare;
+
       const gateA = a.chotThongCong === 'CO' ? 1 : 0;
       const gateB = b.chotThongCong === 'CO' ? 1 : 0;
       if (gateA !== gateB) return gateA - gateB;
@@ -1408,7 +1498,7 @@ class App {
         <div class="empty-state">
           <div class="empty-icon">🏥</div>
           <h4>Chưa có ca báo cáo ra viện nào ${isFilterDay ? `trong ngày ${formatDateVN(this.dischargeFilters.date)}` : ''}</h4>
-          <p>Nhập các ca ra viện vào bảng phía trên và bấm <strong>Lưu tất cả ca vừa nhập</strong> để 4 khâu chuyên môn cùng kiểm duyệt.</p>
+          <p>Nhập các ca ra viện vào bảng phía trên và bấm <strong>Lưu tất cả ca vừa nhập</strong> để các khâu chuyên môn cùng kiểm duyệt.</p>
         </div>
       `;
       if (tableBody) tableBody.innerHTML = `<tr><td colspan="8">${emptyHtml}</td></tr>`;
@@ -1425,8 +1515,8 @@ class App {
           <tr class="table-row ${!isPassed ? 'row-unresolved' : ''}">
             <td class="text-center font-mono text-muted text-xs">${index + 1}</td>
             
-            <td class="font-mono text-xs text-center font-bold">
-              📅 ${formatDateVN(r.ngayBaoCao)}
+            <td class="font-mono text-xs text-center font-bold text-slate-800" style="white-space: nowrap;">
+              ⏰ ${formatDischargeDateTimeVN(r.ngayRaVien || r.ngayBaoCao)}
             </td>
 
             <td>
@@ -1444,7 +1534,6 @@ class App {
                 ${renderStepBtn('duoc', 'Dược', r.kiemDuoc, r.id)}
                 ${renderStepBtn('ketoan', 'KT-BH', r.kiemKeToanBH, r.id)}
                 ${renderStepBtn('khth', 'KHTH', r.kiemKHTH, r.id)}
-                ${renderStepBtn('it', 'IT', r.kiemIT, r.id)}
               </div>
             </td>
 
@@ -1494,30 +1583,30 @@ class App {
             </div>
 
             <div class="card-meta-grid">
-              <div>📅 Báo cáo: <strong>${formatDateVN(r.ngayBaoCao)}</strong></div>
-              <div>👨‍⚕️ BS: <strong>${escapeHtml(r.tenBacSi)}</strong></div>
-              <div style="grid-column: 1 / -1;">🏥 Phòng/Khoa: <strong>${escapeHtml(r.phong)}</strong></div>
+              <div><span class="meta-label">⏰ Ra viện:</span> <strong>${formatDischargeDateTimeVN(r.ngayRaVien || r.ngayBaoCao)}</strong></div>
+              <div><span class="meta-label">📅 Báo cáo:</span> <strong>${formatDateVN(r.ngayBaoCao)}</strong></div>
+              <div><span class="meta-label">👨‍⚕️ Bác sĩ:</span> <strong>${escapeHtml(r.tenBacSi)}</strong></div>
+              <div><span class="meta-label">🏥 Khoa:</span> <strong>${escapeHtml(r.phong)}</strong></div>
             </div>
 
-            <div style="margin: 8px 0; background: #f8fafc; padding: 8px; border-radius: 6px;">
-              <strong class="text-xs block" style="margin-bottom: 4px;">4 Khâu kiểm lỗi (Bấm để đổi nhanh):</strong>
+            <div class="card-steps-container">
+              <span class="card-steps-title">Khâu kiểm lỗi chuyên môn (Bấm để đổi nhanh):</span>
               <div class="steps-badge-grid">
                 ${renderStepBtn('duoc', 'Dược', r.kiemDuoc, r.id)}
-                ${renderStepBtn('ketoan', 'Kế toán BH', r.kiemKeToanBH, r.id)}
+                ${renderStepBtn('ketoan', 'KTBH', r.kiemKeToanBH, r.id)}
                 ${renderStepBtn('khth', 'KHTH', r.kiemKHTH, r.id)}
-                ${renderStepBtn('it', 'IT', r.kiemIT, r.id)}
               </div>
             </div>
 
             ${r.baoCaoTinhTrangSuaLoi ? `
-              <div class="card-response-box" style="margin-bottom: 8px;">
-                <strong>Tình trạng sửa lỗi:</strong> ${escapeHtml(r.baoCaoTinhTrangSuaLoi)}
+              <div class="card-response-box" style="margin-top: 8px;">
+                <strong>💬 Tình trạng sửa lỗi:</strong> ${escapeHtml(r.baoCaoTinhTrangSuaLoi)}
               </div>
             ` : ''}
 
             <div class="card-footer-actions">
-              <button class="btn btn-sm btn-outline flex-1" onclick="window.hsbaApp.modalController.openEditDischargeReportModal('${r.id}')">
-                ✏️ Kiểm lỗi 4 khâu & Chốt cổng
+              <button class="btn btn-sm btn-outline flex-1 btn-mobile-card-edit" onclick="window.hsbaApp.modalController.openEditDischargeReportModal('${r.id}')">
+                ✏️ Kiểm lỗi chuyên môn & Chốt cổng
               </button>
             </div>
           </div>
@@ -1529,34 +1618,1142 @@ class App {
   // ==========================================
   // 4. VIEW TỔNG QUAN & BÁO CÁO (DASHBOARD - SOFT MEDICAL STYLE)
   // ==========================================
+  setDashboardTimeMode(mode) {
+    this.dashboardTimeMode = mode;
+    ['day', 'month', 'year', 'all'].forEach(m => {
+      const btn = document.getElementById(`btn-time-${m}`);
+      if (btn) btn.classList.toggle('active', m.toUpperCase() === mode);
+      const box = document.getElementById(`dash-time-${m}-picker-box`);
+      if (box) box.style.display = (m.toUpperCase() === mode && mode !== 'ALL') ? 'flex' : 'none';
+    });
+
+    const today = getTodayDateString();
+    if (mode === 'DAY') {
+      const inputDay = document.getElementById('dash-time-input-day');
+      if (inputDay && !inputDay.value) inputDay.value = today;
+      this.dashboardTimeValue = inputDay ? inputDay.value : today;
+    } else if (mode === 'MONTH') {
+      const inputMonth = document.getElementById('dash-time-input-month');
+      const currentMonth = today.substring(0, 7);
+      if (inputMonth && !inputMonth.value) inputMonth.value = currentMonth;
+      this.dashboardTimeValue = inputMonth ? inputMonth.value : currentMonth;
+    } else if (mode === 'YEAR') {
+      this.populateDashboardYearSelect();
+      const inputYear = document.getElementById('dash-time-input-year');
+      const currentYear = today.substring(0, 4);
+      if (inputYear && !inputYear.value) inputYear.value = currentYear;
+      this.dashboardTimeValue = inputYear ? inputYear.value : currentYear;
+    } else {
+      this.dashboardTimeValue = '';
+    }
+
+    this.updateDashboardTimeFilterIndicator();
+    this.renderDashboardView();
+  }
+
+  populateDashboardYearSelect() {
+    const sel = document.getElementById('dash-time-input-year');
+    if (!sel || sel.options.length > 0) return;
+    const currentYear = new Date().getFullYear();
+    for (let y = currentYear + 1; y >= currentYear - 5; y--) {
+      const opt = document.createElement('option');
+      opt.value = String(y);
+      opt.textContent = `Năm ${y}`;
+      if (y === currentYear) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  }
+
+  setDashboardTimeToToday() {
+    const today = getTodayDateString();
+    const input = document.getElementById('dash-time-input-day');
+    if (input) input.value = today;
+    this.dashboardTimeValue = today;
+    this.updateDashboardTimeFilterIndicator();
+    this.renderDashboardView();
+  }
+
+  setDashboardTimeToYesterday() {
+    const dt = new Date();
+    dt.setDate(dt.getDate() - 1);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    const yesterday = `${y}-${m}-${d}`;
+    const input = document.getElementById('dash-time-input-day');
+    if (input) input.value = yesterday;
+    this.dashboardTimeValue = yesterday;
+    this.updateDashboardTimeFilterIndicator();
+    this.renderDashboardView();
+  }
+
+  setDashboardTimeToThisMonth() {
+    const today = getTodayDateString();
+    const currentMonth = today.substring(0, 7);
+    const input = document.getElementById('dash-time-input-month');
+    if (input) input.value = currentMonth;
+    this.dashboardTimeValue = currentMonth;
+    this.updateDashboardTimeFilterIndicator();
+    this.renderDashboardView();
+  }
+
+  setDashboardTimeToThisYear() {
+    const currentYear = String(new Date().getFullYear());
+    this.populateDashboardYearSelect();
+    const input = document.getElementById('dash-time-input-year');
+    if (input) input.value = currentYear;
+    this.dashboardTimeValue = currentYear;
+    this.updateDashboardTimeFilterIndicator();
+    this.renderDashboardView();
+  }
+
+  onDashboardTimeInputChange() {
+    if (this.dashboardTimeMode === 'DAY') {
+      const input = document.getElementById('dash-time-input-day');
+      if (input && input.value) this.dashboardTimeValue = input.value;
+    } else if (this.dashboardTimeMode === 'MONTH') {
+      const input = document.getElementById('dash-time-input-month');
+      if (input && input.value) this.dashboardTimeValue = input.value;
+    } else if (this.dashboardTimeMode === 'YEAR') {
+      const input = document.getElementById('dash-time-input-year');
+      if (input && input.value) this.dashboardTimeValue = input.value;
+    }
+    this.updateDashboardTimeFilterIndicator();
+    this.renderDashboardView();
+  }
+
+  updateDashboardTimeFilterIndicator() {
+    const textEl = document.getElementById('dash-time-filter-text');
+    const chartTimeLabel = document.getElementById('dash-chart-time-label');
+    let label = '';
+    if (this.dashboardTimeMode === 'DAY') {
+      const today = getTodayDateString();
+      if (this.dashboardTimeValue === today) {
+        label = `Hôm nay (${formatDateVN(this.dashboardTimeValue)})`;
+      } else {
+        label = `Ngày ${formatDateVN(this.dashboardTimeValue)}`;
+      }
+    } else if (this.dashboardTimeMode === 'MONTH') {
+      const parts = (this.dashboardTimeValue || '').split('-');
+      label = parts.length === 2 ? `Tháng ${parts[1]}/${parts[0]}` : `Tháng ${this.dashboardTimeValue}`;
+    } else if (this.dashboardTimeMode === 'YEAR') {
+      label = `Năm ${this.dashboardTimeValue}`;
+    } else {
+      label = 'Toàn bộ thời gian (Tất cả)';
+    }
+    if (textEl) textEl.textContent = label;
+    if (chartTimeLabel) chartTimeLabel.textContent = label;
+  }
+
+  syncDashboardTimeFilterInputs() {
+    const today = getTodayDateString();
+    const inputDay = document.getElementById('dash-time-input-day');
+    if (inputDay && !inputDay.value) inputDay.value = today;
+
+    const inputMonth = document.getElementById('dash-time-input-month');
+    if (inputMonth && !inputMonth.value) inputMonth.value = today.substring(0, 7);
+
+    this.populateDashboardYearSelect();
+    const inputYear = document.getElementById('dash-time-input-year');
+    if (inputYear && !inputYear.value) inputYear.value = today.substring(0, 4);
+
+    this.updateDashboardTimeFilterIndicator();
+  }
+
+  filterConditionErrors(type) {
+    this.dashboardConditionFilter = type;
+    ['all', 'dk1', 'dk2'].forEach(t => {
+      const btn = document.getElementById(`btn-filter-cond-${t}`);
+      if (btn) btn.classList.toggle('active', t.toUpperCase() === type);
+    });
+    if (this.dashboardStats) {
+      this.renderConditionErrorsTable(this.dashboardStats);
+    }
+  }
+
+  setViolatorViewMode(mode) {
+    this.violatorViewMode = mode;
+    const btnDoc = document.getElementById('btn-violator-mode-doctor');
+    const btnDept = document.getElementById('btn-violator-mode-dept');
+    if (btnDoc) btnDoc.classList.toggle('active', mode === 'DOCTOR');
+    if (btnDept) btnDept.classList.toggle('active', mode === 'DEPT');
+    this.renderViolatorsList();
+  }
+
+  toggleViolatorAccordion(violatorKey) {
+    if (this.expandedViolators.has(violatorKey)) {
+      this.expandedViolators.delete(violatorKey);
+    } else {
+      this.expandedViolators.add(violatorKey);
+    }
+    this.renderViolatorsList();
+  }
+
+  renderDeptDischargeTable(stats) {
+    const tbody = document.getElementById('dash-dept-discharge-body');
+    if (!tbody) return;
+
+    if (!stats.deptStats || stats.deptStats.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center p-4 text-muted">Chưa có dữ liệu khoa phòng</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = stats.deptStats.map((d, idx) => {
+      const hasDischarge = d.totalDischarge > 0;
+      const hasDK1 = d.dk1Count > 0;
+      const hasDK2 = d.dk2Count > 0;
+      const hasUnresolved = d.unresolvedErrors > 0;
+
+      return `
+        <tr>
+          <td class="text-center font-mono text-xs text-muted">${idx + 1}</td>
+          <td>
+            <div class="font-semibold text-slate-900">${escapeHtml(d.name)}</div>
+            ${d.code ? `<div class="text-xs text-muted font-mono">Mã khoa: ${escapeHtml(d.code)}</div>` : ''}
+          </td>
+          <td class="text-center">
+            <span class="font-bold font-mono text-sm ${hasDischarge ? 'text-primary' : 'text-muted'}">${d.totalDischarge}</span>
+          </td>
+          <td class="text-center">
+            ${d.totalDischarge > 0 ? `
+              <span class="badge-gate-pass">
+                ✓ ${d.passedDischarge} (${d.passRatio}%)
+              </span>
+            ` : '<span class="text-muted text-xs">---</span>'}
+          </td>
+          <td class="text-center">
+            ${d.pendingDischarge > 0 ? `
+              <span class="badge-gate-pending">
+                ⏳ ${d.pendingDischarge}
+              </span>
+            ` : (d.totalDischarge > 0 ? '<span class="text-xs text-success font-semibold">0</span>' : '<span class="text-muted text-xs">---</span>')}
+          </td>
+          <td class="text-center">
+            ${hasDK1 ? `
+              <span class="badge-cond-dk1 font-mono">
+                ⚠️ ${d.dk1Count} lỗi
+              </span>
+            ` : '<span class="text-xs text-slate-400">0</span>'}
+          </td>
+          <td class="text-center">
+            ${hasDK2 ? `
+              <span class="badge-cond-dk2 font-mono">
+                🚨 ${d.dk2Count} lỗi
+              </span>
+            ` : '<span class="text-xs text-slate-400">0</span>'}
+          </td>
+          <td class="text-center font-bold font-mono text-sm ${hasUnresolved ? 'text-danger' : 'text-success'}">
+            ${d.unresolvedErrors}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  renderConditionErrorsTable(stats) {
+    const tbody = document.getElementById('dash-condition-errors-body');
+    if (!tbody) return;
+
+    let errorList = [];
+    if (this.dashboardConditionFilter === 'DK1') {
+      errorList = stats.dk1Errors || [];
+    } else if (this.dashboardConditionFilter === 'DK2') {
+      errorList = stats.dk2Errors || [];
+    } else {
+      errorList = (stats.dk1Errors || []).concat(stats.dk2Errors || []);
+    }
+
+    if (!errorList.length) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="10" class="text-center p-6 text-muted">
+            <div style="font-size: 1.5rem; margin-bottom: 6px;">🎉</div>
+            <div class="font-semibold text-slate-700">Tuyệt vời! Không phát hiện lỗi bệnh án nào thuộc ${this.dashboardConditionFilter === 'ALL' ? 'Điều kiện 1 & Điều kiện 2' : (this.dashboardConditionFilter === 'DK1' ? 'Điều kiện 1' : 'Điều kiện 2')}</div>
+            <div class="text-xs text-slate-400" style="margin-top: 4px;">Tất cả hồ sơ ra viện đã hoàn thành xử lý sửa lỗi đúng thời hạn quy định.</div>
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = errorList.map((e, idx) => {
+      const isDK1 = e.conditionType === 'DK1';
+      const dischargeDateStr = e.dischargeDate ? formatDateVN(e.dischargeDate) : '---';
+
+      return `
+        <tr>
+          <td class="text-center font-mono text-xs text-muted">${idx + 1}</td>
+          <td>
+            ${isDK1 ? `
+              <span class="badge-cond-dk1">
+                ⚠️ Điều kiện 1 (16h01 N)
+              </span>
+            ` : `
+              <span class="badge-cond-dk2">
+                🚨 Điều kiện 2 (16h01 N+1)
+              </span>
+            `}
+          </td>
+          <td>
+            <span class="font-mono font-bold text-slate-900">${escapeHtml(e.maKCB)}</span>
+          </td>
+          <td>
+            <div class="font-semibold text-slate-900">${escapeHtml(e.tenBenhNhan || '---')}</div>
+          </td>
+          <td>
+            <span class="text-xs font-medium text-slate-700">${escapeHtml(e.khoaPhong || '---')}</span>
+          </td>
+          <td>
+            <span class="text-xs text-slate-800 font-semibold">${escapeHtml(e.nguoiChiDinh || '(Chưa rõ BS)')}</span>
+          </td>
+          <td class="text-center font-mono text-xs text-slate-700">
+            ${dischargeDateStr}
+          </td>
+          <td class="text-center">
+            <span class="font-mono text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-1 rounded">
+              ${escapeHtml(e.checkDeadline)}
+            </span>
+          </td>
+          <td class="text-center">
+            ${getErrorStatusBadge(e.trangThaiLoi)}
+          </td>
+          <td>
+            <div class="text-xs text-slate-800" style="max-width: 320px; line-height: 1.4;">
+              ${escapeHtml(e.dienGiaiLoi || '')}
+            </div>
+            ${e.mucDoCanhBao || e.mucDoLoi ? `
+              <div style="margin-top: 3px;">
+                ${getMucDoLoiBadge(e.mucDoLoi || e.mucDoCanhBao)}
+              </div>
+            ` : ''}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  renderViolatorsList() {
+    const container = document.getElementById('dash-violators-list-container');
+    if (!container || !this.dashboardStats) return;
+
+    const stats = this.dashboardStats;
+    const deptFilterEl = document.getElementById('dash-violator-dept-filter');
+    const typeFilterEl = document.getElementById('dash-violator-type-filter');
+    const searchEl = document.getElementById('dash-violator-search');
+
+    const selectedDept = deptFilterEl ? deptFilterEl.value.trim().toLowerCase() : '';
+    const selectedType = typeFilterEl ? typeFilterEl.value : 'ALL';
+    const keyword = searchEl ? removeVietnameseTones(searchEl.value.trim()) : '';
+
+    let items = [];
+
+    if (this.violatorViewMode === 'DOCTOR') {
+      items = [...stats.violatorsList];
+    } else {
+      // Group theo Khoa / Phòng từ dữ liệu đã lọc theo thời gian
+      const deptMap = new Map();
+      stats.deptStats.forEach(d => {
+        const key = d.name.trim().toLowerCase();
+        const deptRecords = (stats.filteredRecords || []).filter(r => (r.khoaPhong || '').trim().toLowerCase() === key);
+        const dk1Count = stats.dk1Errors.filter(e => (e.khoaPhong || '').trim().toLowerCase() === key).length;
+        const dk2Count = stats.dk2Errors.filter(e => (e.khoaPhong || '').trim().toLowerCase() === key).length;
+        const unresolvedCount = deptRecords.filter(r => r.trangThaiLoi !== 'ĐÃ XONG').length;
+
+        deptMap.set(key, {
+          name: d.name,
+          department: d.code ? `Mã: ${d.code}` : 'Khoa / Phòng điều trị',
+          isGenericDept: true,
+          totalErrors: deptRecords.length,
+          unresolvedCount,
+          dk1Count,
+          dk2Count,
+          errors: deptRecords.map(r => ({
+            ...r,
+            isDK1: stats.dk1Errors.some(e => e.id === r.id),
+            isDK2: stats.dk2Errors.some(e => e.id === r.id)
+          }))
+        });
+      });
+
+      items = Array.from(deptMap.values()).filter(d => d.totalErrors > 0).sort((a, b) => 
+        (b.dk2Count + b.dk1Count) - (a.dk2Count + a.dk1Count) || 
+        b.unresolvedCount - a.unresolvedCount || 
+        b.totalErrors - a.totalErrors
+      );
+    }
+
+    if (selectedDept) {
+      items = items.filter(v => (v.department || '').toLowerCase().includes(selectedDept) || (v.name || '').toLowerCase().includes(selectedDept));
+    }
+
+    if (selectedType === 'DK1') {
+      items = items.filter(v => v.dk1Count > 0);
+    } else if (selectedType === 'DK2') {
+      items = items.filter(v => v.dk2Count > 0);
+    } else if (selectedType === 'UNRESOLVED') {
+      items = items.filter(v => v.unresolvedCount > 0);
+    }
+
+    if (keyword) {
+      items = items.filter(v => {
+        const nameClean = removeVietnameseTones(v.name || '');
+        const deptClean = removeVietnameseTones(v.department || '');
+        return nameClean.includes(keyword) || deptClean.includes(keyword);
+      });
+    }
+
+    if (!items.length) {
+      container.innerHTML = `
+        <div class="text-center p-6 text-muted">
+          <div style="font-size: 1.5rem; margin-bottom: 4px;">🔍</div>
+          <div class="font-semibold text-slate-700">Không tìm thấy bác sĩ / người ra y lệnh hoặc khoa phòng nào phù hợp với bộ lọc</div>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = items.map((v, idx) => {
+      const itemKey = `${v.name}___${v.department}`;
+      const isExpanded = this.expandedViolators.has(itemKey);
+      const initials = v.name.split(' ').map(n => n[0]).filter(Boolean).slice(-2).join('').toUpperCase();
+
+      return `
+        <div class="violator-card-item">
+          <div class="violator-card-header" onclick="window.hsbaApp.toggleViolatorAccordion('${escapeHtml(itemKey)}')">
+            <div class="violator-main-info">
+              <div class="violator-avatar-badge">
+                ${v.isGenericDept ? '🏥' : (initials || 'BS')}
+              </div>
+              <div>
+                <div class="violator-name">${escapeHtml(v.name)}</div>
+                <div class="violator-dept">📍 ${escapeHtml(v.department)}</div>
+              </div>
+            </div>
+
+            <div class="violator-stat-pills">
+              <span class="stat-pill stat-pill-total">Tổng: ${v.totalErrors} lỗi</span>
+              ${v.unresolvedCount > 0 ? `
+                <span class="stat-pill stat-pill-unresolved">⏳ ${v.unresolvedCount} chưa sửa</span>
+              ` : '<span class="stat-pill" style="background:#dcfce7;color:#15803d;">✓ Đã xong</span>'}
+              ${v.dk1Count > 0 ? `
+                <span class="stat-pill stat-pill-dk1">⚠️ ${v.dk1Count} lỗi ĐK1</span>
+              ` : ''}
+              ${v.dk2Count > 0 ? `
+                <span class="stat-pill stat-pill-dk2">🚨 ${v.dk2Count} lỗi ĐK2</span>
+              ` : ''}
+              <button class="btn btn-xs btn-outline" style="margin-left: 6px;">
+                ${isExpanded ? '▲ Thu gọn' : `▼ Xem chi tiết (${v.errors.length})`}
+              </button>
+            </div>
+          </div>
+
+          ${isExpanded ? `
+            <div class="violator-detail-table">
+              <div style="font-size: 0.78rem; font-weight: 700; color: var(--slate-700); margin-bottom: 8px;">
+                📋 Danh sách chi tiết ${v.errors.length} lỗi do ${escapeHtml(v.name)} ghi nhận:
+              </div>
+              <div class="table-container" style="border: 1px solid var(--border-soft); border-radius: 4px; background: #ffffff;">
+                <table class="data-table" style="font-size: 0.78rem;">
+                  <thead>
+                    <tr>
+                      <th class="text-center" style="width: 40px;">STT</th>
+                      <th style="width: 110px;">MÃ KCB</th>
+                      <th>BỆNH NHÂN</th>
+                      <th>KHOA / PHÒNG</th>
+                      <th style="width: 120px;">THỜI GIAN CHỈ ĐỊNH</th>
+                      <th class="text-center" style="width: 100px;">ĐIỀU KIỆN</th>
+                      <th class="text-center" style="width: 100px;">TIẾN ĐỘ</th>
+                      <th>NỘI DUNG SAI SÓT / LỖI</th>
+                      <th class="text-center" style="width: 70px;">THAO TÁC</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${v.errors.map((err, eIdx) => `
+                      <tr>
+                        <td class="text-center font-mono text-muted">${eIdx + 1}</td>
+                        <td><span class="font-mono font-bold text-slate-900">${escapeHtml(err.maKCB)}</span></td>
+                        <td><strong>${escapeHtml(err.tenBenhNhan || '---')}</strong></td>
+                        <td>${escapeHtml(err.khoaPhong || '---')}</td>
+                        <td class="font-mono text-xs">${escapeHtml(err.thoiGianChiDinhYL || formatDateVN(err.ngayKiemHoSo))}</td>
+                        <td class="text-center">
+                          ${err.isDK2 ? '<span class="badge-cond-dk2">Lỗi ĐK 2</span>' : (err.isDK1 ? '<span class="badge-cond-dk1">Lỗi ĐK 1</span>' : '<span class="text-muted text-xs">Thường</span>')}
+                        </td>
+                        <td class="text-center">
+                          ${getErrorStatusBadge(err.trangThaiLoi)}
+                        </td>
+                        <td>
+                          <div style="max-width: 280px; line-height: 1.4;">${escapeHtml(err.dienGiaiLoi || '')}</div>
+                        </td>
+                        <td class="text-center">
+                          <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.modalController.openEditErrorModal('${err.id}')">
+                            ✏️ Sửa
+                          </button>
+                        </td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+
+  // ==========================================
+  // SECTION 5: CHART VISUALIZATION & COMPARISON ENGINE
+  // ==========================================
+  getChartMetricDefs() {
+    return [
+      { key: 'totalDischarge', label: '1. Tổng HSBA ra viện', color: '#0f766e', bgColor: 'rgba(15, 118, 110, 0.75)' },
+      { key: 'passedDischarge', label: 'Đã thông cổng', color: '#10b981', bgColor: 'rgba(16, 185, 129, 0.75)' },
+      { key: 'pendingDischarge', label: 'Chưa thông cổng', color: '#f59e0b', bgColor: 'rgba(245, 158, 11, 0.75)' },
+      { key: 'dk1Count', label: '2. Lỗi ĐK 1 (16h01 N)', color: '#ea580c', bgColor: 'rgba(234, 88, 12, 0.75)' },
+      { key: 'dk2Count', label: '3. Lỗi ĐK 2 (16h01 N+1)', color: '#dc2626', bgColor: 'rgba(220, 38, 38, 0.75)' },
+      { key: 'totalErrors', label: 'Tổng lỗi rà soát', color: '#0284c7', bgColor: 'rgba(2, 132, 199, 0.75)' },
+      { key: 'unresolvedErrors', label: 'Lỗi chưa sửa', color: '#e11d48', bgColor: 'rgba(225, 29, 72, 0.75)' },
+      { key: 'passRatio', label: 'Tỷ lệ thông cổng (%)', color: '#7c3aed', bgColor: 'rgba(124, 58, 237, 0.75)' }
+    ];
+  }
+
+  setChartEntityMode(mode) {
+    this.chartEntityMode = mode;
+    const btnDept = document.getElementById('btn-chart-mode-dept');
+    const btnDoc = document.getElementById('btn-chart-mode-doctor');
+    if (btnDept) btnDept.classList.toggle('active', mode === 'DEPT');
+    if (btnDoc) btnDoc.classList.toggle('active', mode === 'DOCTOR');
+
+    const titleEl = document.getElementById('chart-entity-title');
+    if (titleEl) {
+      titleEl.textContent = mode === 'DEPT' ? '🏥 Chọn Khoa / Phòng so sánh:' : '👨‍⚕️ Chọn Bác Sĩ / Người ra Y Lệnh so sánh:';
+    }
+
+    // Reset default selections for the newly active mode
+    this.selectedChartEntities.clear();
+    this.initDefaultChartEntities();
+    this.renderChartEntityCheckboxes();
+    this.renderComparisonChart();
+    this.renderChartDataTable();
+  }
+
+  setChartVisualType(type) {
+    this.chartVisualType = type;
+    ['bar', 'hbar', 'line'].forEach(t => {
+      const btn = document.getElementById(`btn-chart-type-${t}`);
+      if (btn) btn.classList.toggle('active', t === type);
+    });
+    this.renderComparisonChart();
+  }
+
+  renderChartMetricsCheckboxes() {
+    const container = document.getElementById('chart-metrics-container');
+    if (!container) return;
+
+    const defs = this.getChartMetricDefs();
+    container.innerHTML = defs.map(m => {
+      const isChecked = this.selectedChartMetrics.has(m.key);
+      return `
+        <label class="metric-chip-label ${isChecked ? 'active' : ''}" style="${isChecked ? `border-color: ${m.color}; color: ${m.color};` : ''}">
+          <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="window.hsbaApp.toggleChartMetric('${m.key}')" />
+          <span class="metric-color-dot" style="background: ${m.color};"></span>
+          <span>${escapeHtml(m.label)}</span>
+        </label>
+      `;
+    }).join('');
+  }
+
+  toggleChartMetric(metricKey) {
+    if (this.selectedChartMetrics.has(metricKey)) {
+      if (this.selectedChartMetrics.size <= 1) {
+        showToast('Vui lòng chọn ít nhất 1 chỉ số để hiển thị trên biểu đồ!', 'warning');
+        this.renderChartMetricsCheckboxes();
+        return;
+      }
+      this.selectedChartMetrics.delete(metricKey);
+    } else {
+      this.selectedChartMetrics.add(metricKey);
+    }
+    this.renderChartMetricsCheckboxes();
+    this.renderComparisonChart();
+    this.renderChartDataTable();
+  }
+
+  selectAllChartMetrics() {
+    this.getChartMetricDefs().forEach(m => this.selectedChartMetrics.add(m.key));
+    this.renderChartMetricsCheckboxes();
+    this.renderComparisonChart();
+    this.renderChartDataTable();
+  }
+
+  resetDefaultChartMetrics() {
+    this.selectedChartMetrics = new Set(['totalDischarge', 'passedDischarge', 'dk1Count', 'dk2Count', 'unresolvedErrors']);
+    this.renderChartMetricsCheckboxes();
+    this.renderComparisonChart();
+    this.renderChartDataTable();
+  }
+
+  selectErrorsOnlyChartMetrics() {
+    this.selectedChartMetrics = new Set(['dk1Count', 'dk2Count', 'totalErrors', 'unresolvedErrors']);
+    this.renderChartMetricsCheckboxes();
+    this.renderComparisonChart();
+    this.renderChartDataTable();
+  }
+
+  selectDischargeOnlyChartMetrics() {
+    this.selectedChartMetrics = new Set(['totalDischarge', 'passedDischarge', 'pendingDischarge', 'passRatio']);
+    this.renderChartMetricsCheckboxes();
+    this.renderComparisonChart();
+    this.renderChartDataTable();
+  }
+
+  initDefaultChartEntities() {
+    if (!this.dashboardStats) return;
+
+    if (this.chartEntityMode === 'DEPT') {
+      const activeDepts = this.dashboardStats.deptStats.filter(d => (d.totalDischarge > 0 || d.totalErrors > 0));
+      if (activeDepts.length > 0) {
+        activeDepts.slice(0, 7).forEach(d => this.selectedChartEntities.add(d.name));
+      } else {
+        this.dashboardStats.deptStats.slice(0, 6).forEach(d => this.selectedChartEntities.add(d.name));
+      }
+    } else {
+      const doctorsWithErrors = this.dashboardStats.violatorsList.filter(v => !v.isGenericDept || v.totalErrors > 0);
+      if (doctorsWithErrors.length > 0) {
+        doctorsWithErrors.slice(0, 7).forEach(d => this.selectedChartEntities.add(d.name));
+      } else {
+        this.dashboardStats.violatorsList.slice(0, 5).forEach(d => this.selectedChartEntities.add(d.name));
+      }
+    }
+  }
+
+  renderChartEntityCheckboxes() {
+    const container = document.getElementById('chart-entities-container');
+    const badgeEl = document.getElementById('chart-entity-count-badge');
+    const searchEl = document.getElementById('chart-entity-search');
+    if (!container || !this.dashboardStats) return;
+
+    const keyword = searchEl ? removeVietnameseTones(searchEl.value.trim()) : '';
+    let entityItems = [];
+
+    if (this.chartEntityMode === 'DEPT') {
+      entityItems = this.dashboardStats.deptStats.map(d => ({
+        id: d.name,
+        name: d.name,
+        badgeText: `${d.totalDischarge} RV · ${d.totalErrors} lỗi`,
+        totalDischarge: d.totalDischarge,
+        totalErrors: d.totalErrors,
+        errorScore: d.dk2Count * 2 + d.dk1Count + d.unresolvedErrors
+      }));
+    } else {
+      entityItems = this.dashboardStats.violatorsList.map(v => ({
+        id: v.name,
+        name: v.name,
+        dept: v.department,
+        badgeText: `${v.totalErrors} lỗi · ${v.dk2Count} ĐK2`,
+        totalDischarge: 0,
+        totalErrors: v.totalErrors,
+        errorScore: v.dk2Count * 2 + v.dk1Count + v.unresolvedCount
+      }));
+    }
+
+    if (keyword) {
+      entityItems = entityItems.filter(e => {
+        const nameClean = removeVietnameseTones(e.name || '');
+        const deptClean = removeVietnameseTones(e.dept || '');
+        return nameClean.includes(keyword) || deptClean.includes(keyword);
+      });
+    }
+
+    if (badgeEl) {
+      badgeEl.textContent = `${this.selectedChartEntities.size} / ${this.chartEntityMode === 'DEPT' ? this.dashboardStats.deptStats.length : this.dashboardStats.violatorsList.length} đã chọn`;
+    }
+
+    if (!entityItems.length) {
+      container.innerHTML = '<span class="text-xs text-muted p-2">Không tìm thấy khoa/bác sĩ phù hợp</span>';
+      return;
+    }
+
+    container.innerHTML = entityItems.map(item => {
+      const isChecked = this.selectedChartEntities.has(item.id);
+      return `
+        <label class="entity-chip-label ${isChecked ? 'active' : ''}">
+          <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="window.hsbaApp.toggleChartEntity('${escapeHtml(item.id)}')" />
+          <span>${escapeHtml(item.name)}</span>
+          <span class="entity-count-badge">${escapeHtml(item.badgeText)}</span>
+        </label>
+      `;
+    }).join('');
+  }
+
+  toggleChartEntity(entityId) {
+    if (this.selectedChartEntities.has(entityId)) {
+      this.selectedChartEntities.delete(entityId);
+    } else {
+      this.selectedChartEntities.add(entityId);
+    }
+    this.renderChartEntityCheckboxes();
+    this.renderComparisonChart();
+    this.renderChartDataTable();
+  }
+
+  selectAllChartEntities() {
+    if (!this.dashboardStats) return;
+    if (this.chartEntityMode === 'DEPT') {
+      this.dashboardStats.deptStats.forEach(d => this.selectedChartEntities.add(d.name));
+    } else {
+      this.dashboardStats.violatorsList.forEach(v => this.selectedChartEntities.add(v.name));
+    }
+    this.renderChartEntityCheckboxes();
+    this.renderComparisonChart();
+    this.renderChartDataTable();
+  }
+
+  selectTopErrorsChartEntities(topN = 5) {
+    if (!this.dashboardStats) return;
+    this.selectedChartEntities.clear();
+    if (this.chartEntityMode === 'DEPT') {
+      const sorted = [...this.dashboardStats.deptStats].sort((a, b) => 
+        (b.dk2Count * 2 + b.dk1Count + b.unresolvedErrors) - (a.dk2Count * 2 + a.dk1Count + a.unresolvedErrors) ||
+        b.totalErrors - a.totalErrors
+      );
+      sorted.slice(0, topN).forEach(d => this.selectedChartEntities.add(d.name));
+    } else {
+      const sorted = [...this.dashboardStats.violatorsList].sort((a, b) => 
+        (b.dk2Count * 2 + b.dk1Count + b.unresolvedCount) - (a.dk2Count * 2 + a.dk1Count + a.unresolvedCount) ||
+        b.totalErrors - a.totalErrors
+      );
+      sorted.slice(0, topN).forEach(v => this.selectedChartEntities.add(v.name));
+    }
+    this.renderChartEntityCheckboxes();
+    this.renderComparisonChart();
+    this.renderChartDataTable();
+  }
+
+  selectTopDischargeChartEntities(topN = 5) {
+    if (!this.dashboardStats) return;
+    this.selectedChartEntities.clear();
+    if (this.chartEntityMode === 'DEPT') {
+      const sorted = [...this.dashboardStats.deptStats].sort((a, b) => b.totalDischarge - a.totalDischarge);
+      sorted.slice(0, topN).forEach(d => this.selectedChartEntities.add(d.name));
+    } else {
+      // For doctors, fallback to top records count
+      const sorted = [...this.dashboardStats.violatorsList].sort((a, b) => b.totalErrors - a.totalErrors);
+      sorted.slice(0, topN).forEach(v => this.selectedChartEntities.add(v.name));
+    }
+    this.renderChartEntityCheckboxes();
+    this.renderComparisonChart();
+    this.renderChartDataTable();
+  }
+
+  clearAllChartEntities() {
+    this.selectedChartEntities.clear();
+    this.renderChartEntityCheckboxes();
+    this.renderComparisonChart();
+    this.renderChartDataTable();
+  }
+
+  renderComparisonChart() {
+    const canvas = document.getElementById('dashboard-comparison-chart');
+    if (!canvas) return;
+
+    // Check if Chart.js is ready
+    if (typeof Chart === 'undefined') {
+      const parent = canvas.parentElement;
+      if (parent) {
+        parent.innerHTML = '<div class="p-6 text-center text-muted">Đang tải thư viện biểu đồ so sánh Chart.js...</div>';
+      }
+      return;
+    }
+
+    if (this.chartInstance) {
+      this.chartInstance.destroy();
+      this.chartInstance = null;
+    }
+
+    if (!this.dashboardStats || this.selectedChartEntities.size === 0 || this.selectedChartMetrics.size === 0) {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = '14px Inter, sans-serif';
+      ctx.fillStyle = '#94a3b8';
+      ctx.textAlign = 'center';
+      ctx.fillText('Vui lòng chọn ít nhất 1 khoa/bác sĩ và 1 chỉ số để hiển thị biểu đồ so sánh.', canvas.width / 2 || 200, 150);
+      return;
+    }
+
+    const defs = this.getChartMetricDefs().filter(m => this.selectedChartMetrics.has(m.key));
+    let labels = [];
+    let entityDataMap = [];
+
+    if (this.chartEntityMode === 'DEPT') {
+      const selectedList = this.dashboardStats.deptStats.filter(d => this.selectedChartEntities.has(d.name));
+      labels = selectedList.map(d => d.name);
+      entityDataMap = selectedList.map(d => ({
+        totalDischarge: d.totalDischarge,
+        passedDischarge: d.passedDischarge,
+        pendingDischarge: d.pendingDischarge,
+        dk1Count: d.dk1Count,
+        dk2Count: d.dk2Count,
+        totalErrors: d.totalErrors,
+        unresolvedErrors: d.unresolvedErrors,
+        passRatio: d.passRatio
+      }));
+    } else {
+      const selectedList = this.dashboardStats.violatorsList.filter(v => this.selectedChartEntities.has(v.name));
+      labels = selectedList.map(v => v.name);
+      entityDataMap = selectedList.map(v => ({
+        totalDischarge: 0,
+        passedDischarge: 0,
+        pendingDischarge: 0,
+        dk1Count: v.dk1Count,
+        dk2Count: v.dk2Count,
+        totalErrors: v.totalErrors,
+        unresolvedErrors: v.unresolvedCount,
+        passRatio: 0
+      }));
+    }
+
+    const isHorizontal = this.chartVisualType === 'hbar';
+    const isLine = this.chartVisualType === 'line';
+
+    const datasets = defs.map(metric => {
+      const data = entityDataMap.map(item => item[metric.key] || 0);
+      return {
+        label: metric.label,
+        data: data,
+        backgroundColor: isLine ? metric.bgColor : metric.bgColor,
+        borderColor: metric.color,
+        borderWidth: isLine ? 2.5 : 1,
+        borderRadius: isLine ? 0 : 4,
+        fill: isLine ? false : true,
+        tension: isLine ? 0.25 : 0,
+        pointBackgroundColor: metric.color,
+        pointRadius: isLine ? 4 : 0
+      };
+    });
+
+    const config = {
+      type: isHorizontal ? 'bar' : (isLine ? 'line' : 'bar'),
+      data: {
+        labels: labels,
+        datasets: datasets
+      },
+      options: {
+        indexAxis: isHorizontal ? 'y' : 'x',
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: {
+              boxWidth: 14,
+              boxHeight: 14,
+              usePointStyle: isLine,
+              font: {
+                family: 'Plus Jakarta Sans, sans-serif',
+                size: 11,
+                weight: '600'
+              },
+              color: '#334155',
+              padding: 14
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(15, 23, 42, 0.92)',
+            titleFont: { size: 12, weight: 'bold' },
+            bodyFont: { size: 11 },
+            padding: 10,
+            cornerRadius: 6
+          }
+        },
+        scales: {
+          x: {
+            grid: {
+              color: 'rgba(226, 232, 240, 0.6)',
+              drawBorder: false
+            },
+            ticks: {
+              color: '#64748b',
+              font: { size: 11 }
+            }
+          },
+          y: {
+            beginAtZero: true,
+            grid: {
+              color: 'rgba(226, 232, 240, 0.6)',
+              drawBorder: false
+            },
+            ticks: {
+              precision: 0,
+              color: '#64748b',
+              font: { size: 11 }
+            }
+          }
+        }
+      }
+    };
+
+    this.chartInstance = new Chart(canvas, config);
+  }
+
+  toggleChartDataTable() {
+    this.isChartTableExpanded = !this.isChartTableExpanded;
+    const btn = document.getElementById('btn-toggle-chart-table');
+    const container = document.getElementById('chart-data-table-container');
+    if (btn) btn.textContent = this.isChartTableExpanded ? '▲ Ẩn bảng số liệu' : '▼ Hiện bảng số liệu';
+    if (container) container.style.display = this.isChartTableExpanded ? 'block' : 'none';
+    if (this.isChartTableExpanded) {
+      this.renderChartDataTable();
+    }
+  }
+
+  renderChartDataTable() {
+    const container = document.getElementById('chart-data-table-container');
+    if (!container || !this.dashboardStats) return;
+
+    const defs = this.getChartMetricDefs().filter(m => this.selectedChartMetrics.has(m.key));
+    let rows = [];
+
+    if (this.chartEntityMode === 'DEPT') {
+      const selectedList = this.dashboardStats.deptStats.filter(d => this.selectedChartEntities.has(d.name));
+      rows = selectedList.map(d => ({
+        name: d.name,
+        code: d.code || '',
+        data: d
+      }));
+    } else {
+      const selectedList = this.dashboardStats.violatorsList.filter(v => this.selectedChartEntities.has(v.name));
+      rows = selectedList.map(v => ({
+        name: v.name,
+        code: v.department,
+        data: {
+          totalDischarge: 0,
+          passedDischarge: 0,
+          pendingDischarge: 0,
+          dk1Count: v.dk1Count,
+          dk2Count: v.dk2Count,
+          totalErrors: v.totalErrors,
+          unresolvedErrors: v.unresolvedCount,
+          passRatio: 0
+        }
+      }));
+    }
+
+    if (!rows.length || !defs.length) {
+      container.innerHTML = '<p class="text-xs text-muted p-2">Chưa có dữ liệu để lập bảng đối chiếu.</p>';
+      return;
+    }
+
+    // Compute column totals
+    const totals = {};
+    defs.forEach(d => {
+      totals[d.key] = rows.reduce((sum, r) => sum + (r.data[d.key] || 0), 0);
+    });
+
+    container.innerHTML = `
+      <div class="table-container" style="max-height: 280px; overflow-y: auto;">
+        <table class="chart-matrix-table">
+          <thead>
+            <tr>
+              <th style="width: 40px;">STT</th>
+              <th>${this.chartEntityMode === 'DEPT' ? 'KHOA / PHÒNG' : 'BÁC SĨ / NGƯỜI RA Y LỆNH'}</th>
+              ${defs.map(d => `<th>${escapeHtml(d.label)}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((r, idx) => `
+              <tr>
+                <td class="font-mono text-muted text-center">${idx + 1}</td>
+                <td>
+                  <strong>${escapeHtml(r.name)}</strong>
+                  ${r.code ? `<span class="text-xs text-muted"> (${escapeHtml(r.code)})</span>` : ''}
+                </td>
+                ${defs.map(d => `
+                  <td>${d.key === 'passRatio' ? `${r.data[d.key]}%` : r.data[d.key]}</td>
+                `).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2">TỔNG CỘNG (${rows.length} đối tượng):</td>
+              ${defs.map(d => `
+                <td>${d.key === 'passRatio' ? '---' : totals[d.key]}</td>
+              `).join('')}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    `;
+  }
+
+  // Lấy thông tin và hình ảnh render của biểu đồ so sánh để nhúng vào báo cáo PDF/Excel
+  getDashboardChartInfo() {
+    const canvas = document.getElementById('dashboard-comparison-chart');
+    let chartImage = null;
+    if (canvas && this.selectedChartEntities.size > 0 && this.selectedChartMetrics.size > 0) {
+      try {
+        chartImage = canvas.toDataURL('image/png', 1.0);
+      } catch (e) {
+        console.warn('Không thể chụp hình canvas biểu đồ:', e);
+      }
+    }
+
+    const defs = this.getChartMetricDefs().filter(m => this.selectedChartMetrics.has(m.key));
+    let entities = [];
+    if (this.chartEntityMode === 'DEPT') {
+      entities = (this.dashboardStats?.deptStats || []).filter(d => this.selectedChartEntities.has(d.name));
+    } else {
+      entities = (this.dashboardStats?.violatorsList || []).filter(v => this.selectedChartEntities.has(v.name));
+    }
+
+    const timePeriodText = document.getElementById('dash-time-filter-text')?.textContent || formatDateVN(getTodayDateString());
+    const tableRowsHtml = this.generateChartTableHtmlForReport(defs, entities);
+
+    return {
+      chartImage,
+      chartMode: this.chartEntityMode,
+      chartType: this.chartVisualType,
+      chartTypeLabel: this.chartVisualType === 'bar' ? 'Cột dọc' : (this.chartVisualType === 'hbar' ? 'Cột ngang' : 'Đường'),
+      chartTitle: `Biểu đồ so sánh chỉ số ${this.chartEntityMode === 'DEPT' ? 'Khoa / Phòng' : 'Bác Sĩ / Người ra Y lệnh'} (${this.selectedChartEntities.size} đối tượng)`,
+      timePeriodLabel: timePeriodText,
+      selectedMetrics: defs,
+      selectedEntities: entities,
+      tableRowsHtml
+    };
+  }
+
+  generateChartTableHtmlForReport(defs, entities) {
+    if (!entities.length || !defs.length) return '';
+
+    const isDept = this.chartEntityMode === 'DEPT';
+    return `
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 35px;">STT</th>
+            <th>${isDept ? 'Khoa / Phòng' : 'Bác Sĩ / Người ra Y lệnh'}</th>
+            ${defs.map(d => `<th>${escapeHtml(d.label)}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${entities.map((item, idx) => {
+            const data = isDept ? item : {
+              totalDischarge: 0,
+              passedDischarge: 0,
+              pendingDischarge: 0,
+              dk1Count: item.dk1Count || 0,
+              dk2Count: item.dk2Count || 0,
+              totalErrors: item.totalErrors || 0,
+              unresolvedErrors: item.unresolvedCount || 0,
+              passRatio: 0
+            };
+            return `
+              <tr>
+                <td style="text-align: center;">${idx + 1}</td>
+                <td><strong>${escapeHtml(item.name)}</strong></td>
+                ${defs.map(d => `
+                  <td style="text-align: center; ${d.key.includes('Error') || d.key.includes('dk') ? 'color: #b91c1c; font-weight: bold;' : ''}">
+                    ${d.key === 'passRatio' ? `${data[d.key]}%` : data[d.key]}
+                  </td>
+                `).join('')}
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  // Tải trực tiếp file ảnh PNG của biểu đồ
+  downloadChartImage() {
+    const canvas = document.getElementById('dashboard-comparison-chart');
+    if (!canvas) {
+      showToast('Không tìm thấy khung biểu đồ!', 'error');
+      return;
+    }
+
+    try {
+      const imageURI = canvas.toDataURL('image/png', 1.0);
+      const link = document.createElement('a');
+      const timeTag = (this.dashboardTimeValue || getTodayDateString()).replace(/-/g, '');
+      link.download = `Bieu_do_so_sanh_HSBA_${this.chartEntityMode}_${timeTag}.png`;
+      link.href = imageURI;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast('Đã tải xuống hình ảnh biểu đồ PNG độ phân giải cao thành công!', 'success');
+    } catch (e) {
+      console.error(e);
+      showToast('Lỗi khi tải ảnh biểu đồ. Vui lòng thử lại!', 'error');
+    }
+  }
+
+  // Xuất file PDF có chứa ảnh biểu đồ và bảng đối chiếu
+  exportDashboardPDF() {
+    const stats = this.dashboardStats || computeDashboardStats(
+      storage.getRecords(),
+      storage.getDischargeReports(),
+      storage.getDepartments(),
+      { type: this.dashboardTimeMode, value: this.dashboardTimeValue }
+    );
+    const chartInfo = this.getDashboardChartInfo();
+    printDashboardReportPDF(stats, chartInfo);
+  }
+
+  // Xuất file Excel có chứa sheet đối chiếu biểu đồ
+  exportDashboardExcel() {
+    const stats = this.dashboardStats || computeDashboardStats(
+      storage.getRecords(),
+      storage.getDischargeReports(),
+      storage.getDepartments(),
+      { type: this.dashboardTimeMode, value: this.dashboardTimeValue }
+    );
+    const chartInfo = this.getDashboardChartInfo();
+    const timeTag = (this.dashboardTimeValue || getTodayDateString()).replace(/-/g, '_');
+    const filename = `Bao_cao_Tong_quan_HSBA_BVHNDK_NgheAn_${timeTag}.xlsx`;
+    exportDashboardToExcel(stats, filename, chartInfo);
+  }
+
   renderDashboardView() {
     const records = storage.getRecords();
     const dischargeReports = storage.getDischargeReports();
     const departments = storage.getDepartments();
-    const currentRole = storage.getRoleDetails();
 
-    const total = records.length;
-    const chuaSua = records.filter(r => r.trangThaiLoi === 'CHƯA SỬA').length;
-    const dangSua = records.filter(r => r.trangThaiLoi === 'ĐÃ XEM - ĐANG SỬA').length;
-    const daXong = records.filter(r => r.trangThaiLoi === 'ĐÃ XONG').length;
-    const unresolved = chuaSua + dangSua;
+    // 0. Đồng bộ hiển thị Input ngày / tháng / năm
+    this.syncDashboardTimeFilterInputs();
 
-    const daThongCong = dischargeReports.filter(r => r.chotThongCong === 'CO').length;
-    const totalDischarge = dischargeReports.length;
+    // 1. Tính toán toàn bộ dữ liệu thống kê theo thời gian đã chọn
+    const stats = computeDashboardStats(records, dischargeReports, departments, {
+      type: this.dashboardTimeMode,
+      value: this.dashboardTimeValue
+    });
+    this.dashboardStats = stats;
+
+    const daThongCong = stats.passedDischarge;
+    const totalDischarge = stats.totalDischarge;
     const gateRatio = totalDischarge > 0 ? Math.round((daThongCong / totalDischarge) * 100) : 0;
-
-    const khanCap = records.filter(r => r.mucDoCanhBao === 'Khẩn cấp' || r.mucDoLoi === 'Báo động').length;
     const pushLogs = notificationService.getSystemPushLogs();
 
-    // 1. Cập nhật các KPI Metrics chính
-    const elTotal = document.getElementById('dash-total-errors');
-    if (elTotal) elTotal.textContent = total;
+    // 2. Cập nhật 6 thẻ KPI Metrics chính
+    const elTotalDischarge = document.getElementById('dash-total-discharge');
+    if (elTotalDischarge) elTotalDischarge.textContent = totalDischarge;
 
-    const elPending = document.getElementById('dash-pending-errors');
-    if (elPending) elPending.textContent = unresolved;
+    const elDischargeDepts = document.getElementById('dash-discharge-depts-count');
+    if (elDischargeDepts) {
+      const activeDeptsCount = stats.deptStats.filter(d => d.totalDischarge > 0).length;
+      elDischargeDepts.textContent = `${activeDeptsCount}/${departments.length} khoa có ca ra viện`;
+    }
 
-    const elUrgent = document.getElementById('dash-urgent-count');
-    if (elUrgent) elUrgent.textContent = `${khanCap} lỗi khẩn cấp/báo động`;
+    const elDK1 = document.getElementById('dash-err-dk1-count');
+    if (elDK1) elDK1.textContent = stats.dk1Errors.length;
+
+    const elDK2 = document.getElementById('dash-err-dk2-count');
+    if (elDK2) elDK2.textContent = stats.dk2Errors.length;
 
     const elGate = document.getElementById('dash-gate-passed');
     if (elGate) elGate.textContent = `${daThongCong}/${totalDischarge}`;
@@ -1564,25 +2761,50 @@ class App {
     const elGateRatio = document.getElementById('dash-gate-ratio');
     if (elGateRatio) elGateRatio.textContent = `${gateRatio}% ca ra viện`;
 
+    const elTotalErrors = document.getElementById('dash-total-errors');
+    if (elTotalErrors) elTotalErrors.textContent = stats.totalRecords;
+
+    const elPendingErrors = document.getElementById('dash-pending-errors');
+    if (elPendingErrors) elPendingErrors.textContent = `${stats.unresolvedRecords} lỗi chưa hoàn thành`;
+
     const elZalo = document.getElementById('dash-zalo-sent');
     if (elZalo) elZalo.textContent = `${pushLogs.length} thông báo`;
 
-    // 2. Tình hình 4 Khâu Kiểm Lỗi Ra Viện
+    // 3. Điền danh sách Khoa vào dropdown lọc người phạm lỗi
+    const violatorDeptSelect = document.getElementById('dash-violator-dept-filter');
+    if (violatorDeptSelect && violatorDeptSelect.options.length <= 1) {
+      departments.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.name;
+        opt.textContent = d.name;
+        violatorDeptSelect.appendChild(opt);
+      });
+    }
+
+    // 4. Render Section 1: Thống kê HSBA ra viện từng khoa
+    this.renderDeptDischargeTable(stats);
+
+    // 5. Render Section 2: Bảng rà soát Lỗi Điều kiện 1 & 2
+    this.renderConditionErrorsTable(stats);
+
+    // 6. Render Section 3: Danh sách người phạm lỗi
+    this.renderViolatorsList();
+
+    // 7. Render Section 4: Các Khâu Kiểm Lỗi Ra Viện
     const stepsSummaryContainer = document.getElementById('dash-steps-summary-container');
     if (stepsSummaryContainer) {
       const steps = [
         { key: 'kiemDuoc', name: 'Khâu Dược', icon: '💊', desc: 'Thuốc, VTYT, Kháng sinh' },
-        { key: 'kiemKeToanBH', name: 'Khâu Kế toán BH', icon: '💵', desc: 'Viện phí, Mức hưởng BHYT' },
-        { key: 'kiemKHTH', name: 'Khâu KHTH', icon: '📋', desc: 'Hồ sơ, Chữ ký, Biên bản' },
-        { key: 'kiemIT', name: 'Khâu IT', icon: '💻', desc: 'Dữ liệu HIS, Chuẩn hóa XML' }
+        { key: 'kiemKeToanBH', name: 'Khâu Kế toán BH', icon: '💵', desc: 'Viện phí, Mức hưởng BHYT (Tự động từ Rà soát lỗi)' },
+        { key: 'kiemKHTH', name: 'Khâu KHTH', icon: '📋', desc: 'Hồ sơ, Chữ ký, Biên bản' }
       ];
 
       if (!totalDischarge) {
-        stepsSummaryContainer.innerHTML = '<p class="text-muted text-center p-4">Chưa có dữ liệu hồ sơ ra viện</p>';
+        stepsSummaryContainer.innerHTML = '<p class="text-muted text-center p-4">Chưa có dữ liệu hồ sơ ra viện trong khoảng thời gian này</p>';
       } else {
         stepsSummaryContainer.innerHTML = steps.map(s => {
-          const passCount = dischargeReports.filter(r => r[s.key] && r[s.key].status === 'KHONG_LOI').length;
-          const errorCount = dischargeReports.filter(r => r[s.key] && r[s.key].status === 'CO_LOI').length;
+          const passCount = (stats.filteredDischarges || []).filter(r => r[s.key] && r[s.key].status === 'KHONG_LOI').length;
+          const errorCount = (stats.filteredDischarges || []).filter(r => r[s.key] && r[s.key].status === 'CO_LOI').length;
           const passPercent = Math.round((passCount / totalDischarge) * 100);
 
           return `
@@ -1590,7 +2812,7 @@ class App {
               <div class="dash-step-header">
                 <span class="font-medium text-main">${s.icon} ${s.name} <small class="text-muted">(${s.desc})</small></span>
                 <span class="font-mono text-xs font-semibold ${errorCount > 0 ? 'text-danger' : 'text-success'}">
-                  ${errorCount > 0 ? `⚠️ ${errorCount} lỗi` : '✓ 100% đạt'}
+                  ${errorCount > 0 ? `⚠️ ${errorCount} ca có lỗi` : '✓ 100% đạt'}
                 </span>
               </div>
               <div class="dash-progress-bar" title="Đạt: ${passCount} | Có lỗi: ${errorCount}">
@@ -1603,40 +2825,15 @@ class App {
       }
     }
 
-    // 3. Thống kê theo Khoa/Phòng
-    const deptStatsContainer = document.getElementById('dash-dept-stats-container') || document.getElementById('dash-dept-stats');
-    if (deptStatsContainer) {
-      const deptCounts = departments.map(d => {
-        const deptClean = (d.name || '').trim().toLowerCase();
-        const deptRecords = records.filter(r => (r.khoaPhong || '').trim().toLowerCase() === deptClean);
-        const deptChuaSua = deptRecords.filter(r => r.trangThaiLoi === 'CHƯA SỬA' || r.trangThaiLoi === 'ĐÃ XEM - ĐANG SỬA').length;
-        return {
-          name: d.name,
-          total: deptRecords.length,
-          pending: deptChuaSua,
-          done: deptRecords.length - deptChuaSua
-        };
-      }).filter(d => d.total > 0).sort((a, b) => b.pending - a.pending || b.total - a.total);
-
-      if (!deptCounts.length) {
-        deptStatsContainer.innerHTML = '<p class="text-muted text-center p-4">Chưa có dữ liệu theo khoa phòng</p>';
-      } else {
-        deptStatsContainer.innerHTML = deptCounts.map(d => `
-          <div class="dept-stat-row">
-            <div class="dept-stat-header">
-              <span class="dept-stat-name font-medium">${escapeHtml(d.name)}</span>
-              <div class="dept-stat-badge">
-                ${d.pending > 0 ? `<span class="badge-tag badge-status-danger">${d.pending} chưa xử lý</span>` : '<span class="badge-tag badge-status-success">Đã hoàn thành</span>'}
-                <span class="badge-tag badge-status-neutral">Tổng: ${d.total}</span>
-              </div>
-            </div>
-            <div class="dash-progress-bar">
-              <div class="progress-fill-fail" style="width: ${(d.pending / d.total) * 100}%" title="Chưa xử lý: ${d.pending}"></div>
-              <div class="progress-fill-pass" style="width: ${(d.done / d.total) * 100}%" title="Đã xong: ${d.done}"></div>
-            </div>
-          </div>
-        `).join('');
-      }
+    // 8. Render Section 5: Biểu đồ so sánh trực quan
+    if (this.selectedChartEntities.size === 0) {
+      this.initDefaultChartEntities();
+    }
+    this.renderChartMetricsCheckboxes();
+    this.renderChartEntityCheckboxes();
+    this.renderComparisonChart();
+    if (this.isChartTableExpanded) {
+      this.renderChartDataTable();
     }
   }
 
@@ -1662,11 +2859,8 @@ class App {
               Khu vực Cài đặt hệ thống (Cấu hình Zalo, Ma trận phân quyền, Danh mục Khoa/Phòng, Profile Nhân sự & Sao lưu dữ liệu) chỉ được cấp phép truy cập cho <strong>Quản trị viên (Admin)</strong> và <strong>Phòng Công nghệ Thông tin (IT)</strong>.
             </p>
             <div class="settings-lock-actions">
-              <button class="btn btn-primary" onclick="window.hsbaApp.switchRoleAndUnlock('ADMIN')">
-                <span>👑 Chuyển sang tài khoản Quản trị viên (Admin)</span>
-              </button>
-              <button class="btn btn-outline" onclick="window.hsbaApp.switchTab('records')">
-                <span>📋 Quay lại Danh sách lỗi HSBA</span>
+              <button class="btn btn-primary" onclick="window.hsbaApp.switchTab('records')">
+                <span>📋 Quay lại Rà soát lỗi HSBA</span>
               </button>
             </div>
           </div>
@@ -1935,16 +3129,6 @@ class App {
     supabaseService.onStatusChange(({ connected, message }) => {
       this.updateSupabaseStatusUI(connected, message);
     });
-
-    const headerCloudStatus = document.getElementById('header-cloud-status');
-    if (headerCloudStatus) {
-      headerCloudStatus.onclick = () => {
-        this.switchView('settings');
-        this.settingsSubTab = 'supabase';
-        this.renderSettingsView();
-        this.renderSupabaseSettings();
-      };
-    }
   }
 
   // Render thông tin cấu hình Supabase
@@ -1972,19 +3156,6 @@ class App {
         badge.style.color = '#b91c1c';
         badge.style.borderColor = '#fecaca';
         text.textContent = '🔴 ' + (message || 'Mất kết nối');
-      }
-    }
-
-    // Update Header Pill
-    const headerDot = document.getElementById('header-cloud-dot');
-    const headerText = document.getElementById('header-cloud-text');
-    if (headerDot && headerText) {
-      if (connected) {
-        headerDot.className = 'cloud-status-dot';
-        headerText.textContent = '☁️ Cloud Sync';
-      } else {
-        headerDot.className = 'cloud-status-dot dot-offline';
-        headerText.textContent = '☁️ Offline';
       }
     }
   }
@@ -2118,9 +3289,6 @@ class App {
             ${renderToggle('it', item.it)}
           </td>
           <td class="text-center">
-            ${renderToggle('nhom1', item.nhom1)}
-          </td>
-          <td class="text-center">
             ${renderToggle('nhom2', item.nhom2)}
           </td>
         </tr>
@@ -2137,7 +3305,7 @@ class App {
         if (currentMatrix[idx]) {
           currentMatrix[idx][role] = checked;
           storage.savePermissionsMatrix(currentMatrix);
-          const roleNames = { duoc: 'Khoa Dược', ketoan: 'Kế toán BH', khth: 'KHTH', it: 'CNTT (IT)', nhom1: 'Tổ Rà Soát', nhom2: 'Khoa/Bác sĩ' };
+          const roleNames = { duoc: 'Khoa Dược', ketoan: 'Nhóm KTBH', khth: 'KHTH', it: 'CNTT (IT)', nhom2: 'Khoa/Bác sĩ' };
           const roleDisplayName = roleNames[role] || role;
           showToast(`Đã đổi quyền [${currentMatrix[idx].label}] cho ${roleDisplayName}: ${checked ? '✓ BẬT' : '🔒 KHÓA'}`, 'success', 2500);
           this.updateRoleUI();
@@ -2199,18 +3367,29 @@ class App {
   renderStaffSettings() {
     const staffList = storage.getStaff();
     const tableBody = document.getElementById('settings-staff-table-body');
+    const currentUser = storage.getCurrentUser();
 
     if (!tableBody) return;
 
     tableBody.innerHTML = staffList.map((staff, index) => {
       const role = ROLES[staff.defaultRole] || ROLES.NHOM_2;
       const pushIdentifier = staff.zaloId || staff.phone || staff.id;
+      const isCurrentLoggedIn = currentUser && currentUser.id === staff.id;
 
       return `
-        <tr>
+        <tr class="${isCurrentLoggedIn ? 'row-current-user' : ''}">
           <td class="text-center font-mono text-muted">${index + 1}</td>
           <td>
             <div class="font-bold text-primary">${escapeHtml(staff.name)}</div>
+            ${isCurrentLoggedIn ? '<span class="badge-perm-allow" style="display: inline-block; margin-top: 3px; font-size: 0.72rem;">👤 Đang đăng nhập</span>' : ''}
+          </td>
+          <td>
+            <div class="font-mono text-xs" style="color: var(--slate-800); font-weight: 600;">
+              👤 ${escapeHtml(staff.username || staff.id)}
+            </div>
+            <div class="font-mono text-xs text-muted" style="margin-top: 2px;">
+              🔑 ${escapeHtml(staff.password || '123')}
+            </div>
           </td>
           <td>
             <div class="font-medium">${escapeHtml(staff.department)}</div>
@@ -2228,10 +3407,10 @@ class App {
             <span class="perm-tag perm-tag-yes" title="Nhân viên sẵn sàng nhận cảnh báo đẩy HSBA tức thời">🔔 Sẵn sàng Push</span>
           </td>
           <td>
-            <span class="role-pill ${role.badgeClass}">${role.icon} ${escapeHtml(role.name.split(':')[0])}</span>
+            <span class="role-pill ${role.badgeClass}" title="${escapeHtml(role.description)}">${role.icon} ${escapeHtml(role.name)}</span>
           </td>
           <td class="text-center">
-            <div class="action-buttons-group">
+            <div class="action-buttons-group" style="justify-content: center;">
               <button class="btn-action-icon btn-edit" onclick="window.hsbaApp.modalController.openStaffModal('${staff.id}')" title="Sửa hồ sơ nhân viên">✏️</button>
               <button class="btn-action-icon btn-danger" onclick="window.hsbaApp.deleteStaff('${staff.id}', '${escapeHtml(staff.name)}')" title="Xóa nhân viên">🗑️</button>
             </div>

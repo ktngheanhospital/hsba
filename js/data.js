@@ -19,13 +19,13 @@ export const ROLES = {
   },
   KETOAN_BH: {
     id: 'KETOAN_BH',
-    name: 'Kế toán Bảo hiểm (Viện phí & BHYT)',
-    shortName: 'KT-BH',
-    description: 'ĐỘC QUYỀN kiểm duyệt khâu Kế toán Bảo hiểm (Mức hưởng BHYT, Viện phí, Bảng kê)',
+    name: 'Nhóm KTBH (Tổ Rà Soát & Kế Toán BHYT)',
+    shortName: 'Nhóm KTBH',
+    description: 'Tổ Rà Soát HSBA & Kế toán BHYT: Phụ trách rà soát phát hiện lỗi, ấn định Mức độ lỗi & duyệt khâu KTBH',
     badgeClass: 'role-badge-ketoan',
     icon: '💵',
     canAddError: true,
-    canDeleteError: false,
+    canDeleteError: true,
     canChotThongCong: false,
     canAccessSettings: false, // Không có quyền truy cập Cài đặt
     allowedCheckSteps: ['ketoan']
@@ -47,19 +47,19 @@ export const ROLES = {
     id: 'IT',
     name: 'Phòng Công nghệ Thông tin (IT)',
     shortName: 'IT',
-    description: 'ĐỘC QUYỀN kiểm duyệt khâu IT (Dữ liệu HIS, XML cổng) & Quản trị Cài đặt kỹ thuật',
+    description: 'Quản trị Cài đặt kỹ thuật & Đồng bộ dữ liệu hệ thống',
     badgeClass: 'role-badge-it',
     icon: '💻',
     canAddError: true,
     canDeleteError: false,
     canChotThongCong: false,
     canAccessSettings: true, // Có quyền truy cập Cài đặt kỹ thuật
-    allowedCheckSteps: ['it']
+    allowedCheckSteps: []
   },
   NHOM_2: {
     id: 'NHOM_2',
     name: 'Khoa / Bác sĩ Điều Trị',
-    shortName: 'Khoa/Bác sĩ',
+    shortName: 'Khoa/BS',
     description: 'Báo cáo danh sách ra viện hàng ngày, giải trình và cập nhật tình trạng khắc phục lỗi',
     badgeClass: 'role-badge-nhom2',
     icon: '👨‍⚕️',
@@ -69,60 +69,50 @@ export const ROLES = {
     canAccessSettings: false, // Không có quyền truy cập Cài đặt
     allowedCheckSteps: []
   },
-  NHOM_1: {
-    id: 'NHOM_1',
-    name: 'Nhóm 1: Tổ Rà Soát HSBA',
-    shortName: 'Tổ Rà Soát',
-    description: 'Chuyên viên kiểm tra, rà soát phát hiện sai sót bệnh án định kỳ & kích hoạt nhắc Zalo',
-    badgeClass: 'role-badge-nhom1',
-    icon: '🔍',
-    canAddError: true,
-    canDeleteError: true,
-    canChotThongCong: false,
-    canAccessSettings: false, // Không có quyền truy cập Cài đặt
-    allowedCheckSteps: []
-  },
   ADMIN: {
     id: 'ADMIN',
     name: 'Quản trị viên (Toàn quyền)',
     shortName: 'Admin',
-    description: 'Toàn quyền kiểm soát, duyệt tất cả 4 khâu kiểm lỗi, chốt thông cổng và Cài đặt hệ thống',
+    description: 'Toàn quyền kiểm soát, duyệt tất cả các khâu kiểm lỗi, chốt thông cổng và Cài đặt hệ thống',
     badgeClass: 'role-badge-admin',
     icon: '👑',
     canAddError: true,
     canDeleteError: true,
     canChotThongCong: true,
     canAccessSettings: true, // Toàn quyền truy cập Cài đặt
-    allowedCheckSteps: ['duoc', 'ketoan', 'khth', 'it']
+    allowedCheckSteps: ['duoc', 'ketoan', 'khth']
   }
 };
 
 export const PERMISSION_COLUMNS = [
-  { key: 'truyCapCaiDat', label: '1. Truy cập Phân hệ Cài đặt hệ thống', duoc: false, ketoan: false, khth: false, it: true, nhom1: false, nhom2: false, desc: 'ĐỘC QUYỀN: Quản trị viên & IT' },
-  { key: 'kiemDuoc', label: '2. Khâu Dược (Thuốc, VTYT, Kháng sinh)', duoc: true, ketoan: false, khth: false, it: false, nhom1: false, nhom2: false, desc: 'Chỉ Khoa Dược & Admin duyệt' },
-  { key: 'kiemKeToanBH', label: '3. Khâu Kế toán BH (Viện phí, BHYT)', duoc: false, ketoan: true, khth: false, it: false, nhom1: false, nhom2: false, desc: 'Chỉ Kế toán BHYT & Admin duyệt' },
-  { key: 'kiemKHTH', label: '4. Khâu Kế hoạch Tổng hợp (Hồ sơ, Chữ ký)', duoc: false, ketoan: false, khth: true, it: false, nhom1: false, nhom2: false, desc: 'Chỉ KHTH & Admin duyệt' },
-  { key: 'kiemIT', label: '5. Khâu IT (Dữ liệu HIS, Chuẩn hóa XML)', duoc: false, ketoan: false, khth: false, it: true, nhom1: false, nhom2: false, desc: 'Chỉ IT & Admin duyệt' },
-  { key: 'chotThongCong', label: '6. Chốt Thông Cổng BHYT / Ra Viện', duoc: false, ketoan: false, khth: true, it: false, nhom1: false, nhom2: false, desc: 'ĐỘC QUYỀN: KHTH & Admin' },
-  { key: 'maKCB', label: '7. Thông tin Rà soát lỗi (Mã KCB, Mức độ lỗi, Diễn giải...)', duoc: true, ketoan: true, khth: true, it: true, nhom1: true, nhom2: false, desc: 'Kế toán BHYT / Tổ rà soát / Bộ phận chuyên môn nhập' },
-  { key: 'trangThaiLoi', label: '8. Tiến độ khắc phục & Ý kiến Khoa phòng', duoc: false, ketoan: false, khth: false, it: false, nhom1: false, nhom2: true, desc: 'Khoa phòng / Bác sĩ / Người sửa hồ sơ cập nhật' },
-  { key: 'baoCaoDanhSachRaVien', label: '9. Báo cáo danh sách ra viện hàng ngày', duoc: true, ketoan: true, khth: true, it: true, nhom1: true, nhom2: true, desc: 'Các Khoa/Phòng nhập ca ra viện' },
-  { key: 'baoCaoTinhTrangSuaLoi', label: '10. Báo cáo tình trạng sửa lỗi (Text)', duoc: true, ketoan: true, khth: true, it: true, nhom1: true, nhom2: true, desc: 'Khoa phòng cập nhật tiến độ' }
+  { key: 'truyCapCaiDat', label: '1. Truy cập Phân hệ Cài đặt hệ thống', duoc: false, ketoan: false, khth: false, it: true, nhom2: false, desc: 'ĐỘC QUYỀN: Quản trị viên & IT' },
+  { key: 'kiemDuoc', label: '2. Khâu Dược (Thuốc, VTYT, Kháng sinh)', duoc: true, ketoan: false, khth: false, it: false, nhom2: false, desc: 'Chỉ Khoa Dược & Admin duyệt' },
+  { key: 'kiemKeToanBH', label: '3. Khâu KTBH (Viện phí, BHYT)', duoc: false, ketoan: true, khth: false, it: false, nhom2: false, desc: 'Nhóm KTBH & Admin duyệt (Tự động theo Rà soát lỗi)' },
+  { key: 'kiemKHTH', label: '4. Khâu Kế hoạch Tổng hợp (Hồ sơ, Chữ ký)', duoc: false, ketoan: false, khth: true, it: false, nhom2: false, desc: 'Chỉ KHTH & Admin duyệt' },
+  { key: 'chotThongCong', label: '5. Chốt Thông Cổng BHYT / Ra Viện', duoc: false, ketoan: false, khth: true, it: false, nhom2: false, desc: 'ĐỘC QUYỀN: KHTH & Admin' },
+  { key: 'maKCB', label: '6. Thông tin Rà soát lỗi (Mã KCB, Mức độ lỗi, Diễn giải...)', duoc: true, ketoan: true, khth: true, it: true, nhom2: false, desc: 'Nhóm KTBH / Bộ phận chuyên môn / KHTH nhập' },
+  { key: 'trangThaiLoi', label: '7. Tiến độ khắc phục & Ý kiến Khoa phòng', duoc: false, ketoan: false, khth: false, it: false, nhom2: true, desc: 'Khoa phòng / Bác sĩ / Người sửa hồ sơ cập nhật' },
+  { key: 'baoCaoDanhSachRaVien', label: '8. Báo cáo danh sách ra viện hàng ngày', duoc: true, ketoan: true, khth: true, it: true, nhom2: true, desc: 'Các Khoa/Phòng nhập ca ra viện' },
+  { key: 'baoCaoTinhTrangSuaLoi', label: '9. Báo cáo tình trạng sửa lỗi (Text)', duoc: true, ketoan: true, khth: true, it: true, nhom2: true, desc: 'Khoa phòng cập nhật tiến độ' },
+  { key: 'xoaBaoCaoRaVien', label: '10. Xóa báo cáo ra viện / duyệt thông cổng', duoc: false, ketoan: false, khth: false, it: false, nhom2: true, desc: 'ĐỘC QUYỀN: Khoa / Bác sĩ Điều Trị (NHOM_2) & Admin' }
 ];
 
 export const MUC_DO_LOI = [
+  { id: 'KHONG_CO_LOI', label: 'Không có lỗi', color: 'success', bg: '#dcfce7', text: '#15803d', border: '#bbf7d0', icon: '🟢' },
   { id: 'NHAC_NHO', label: 'Nhắc nhở', color: 'warning', bg: '#fef3c7', text: '#b45309', border: '#fde68a', icon: '🟡' },
   { id: 'YEU_CAU_KIEM_TRA', label: 'Yêu cầu kiểm tra', color: 'purple', bg: '#f3e8ff', text: '#7e22ce', border: '#ddd6fe', icon: '🟣' },
   { id: 'BAO_DONG', label: 'Báo động', color: 'danger', bg: '#fee2e2', text: '#b91c1c', border: '#fecaca', icon: '🚨' }
 ];
 
 export const MUC_DO_CANH_BAO = [
+  { id: 'KHONG_CO_LOI', label: 'Không có lỗi', color: 'success', bg: '#dcfce7', text: '#15803d', border: '#bbf7d0' },
   { id: 'BAO_DONG', label: 'Báo động', color: 'danger', bg: '#fee2e2', text: '#b91c1c', border: '#fca5a5' },
   { id: 'YEU_CAU_KIEM_TRA', label: 'Yêu cầu kiểm tra', color: 'purple', bg: '#f3e8ff', text: '#7e22ce', border: '#ddd6fe' },
   { id: 'NHAC_NHO', label: 'Nhắc nhở', color: 'warning', bg: '#fef3c7', text: '#b45309', border: '#fde68a' }
 ];
 
 export const TRANG_THAI_KIEM_DUYET = [
+  { id: 'KHONG_CO_LOI', label: 'Không có lỗi', color: 'success', bg: '#dcfce7', text: '#15803d' },
   { id: 'NHAC_NHO', label: 'Nhắc nhở', color: 'warning', bg: '#fef3c7', text: '#b45309' },
   { id: 'YEU_CAU_KIEM_TRA', label: 'Yêu cầu kiểm tra', color: 'purple', bg: '#f3e8ff', text: '#7e22ce' },
   { id: 'BAO_DONG', label: 'Báo động', color: 'danger', bg: '#fee2e2', text: '#b91c1c' }
@@ -182,7 +172,7 @@ export const DEFAULT_STAFF = [
     avatarEmoji: '📋' 
   },
 
-  // Tổ Rà Soát HSBA (Nhóm 1)
+  // Nhóm KTBH (Tổ Rà Soát & Kế toán BHYT)
   { 
     id: 'NV_RASOAT', 
     username: 'rasoat', 
@@ -192,7 +182,7 @@ export const DEFAULT_STAFF = [
     position: 'Cán bộ Rà Soát HSBA', 
     phone: '', 
     zaloId: '', 
-    defaultRole: 'NHOM_1', 
+    defaultRole: 'KETOAN_BH', 
     avatarEmoji: '🔍' 
   },
 
@@ -210,7 +200,7 @@ export const DEFAULT_STAFF = [
     avatarEmoji: '💊' 
   },
   
-  // Kế toán Bảo hiểm (Duyệt khâu Kế toán BH)
+  // Kế toán Bảo hiểm (Nhóm KTBH)
   { 
     id: 'NV_KETOAN', 
     username: 'ketoan', 

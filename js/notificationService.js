@@ -433,8 +433,8 @@ class NotificationService {
       const userName = (user.name || '').trim().toLowerCase();
       const userDept = (user.department || '').trim().toLowerCase();
 
-      // Nếu là Quản trị viên, KHTH hoặc Tổ Rà Soát: Xem được tất cả thông báo của toàn viện
-      if (role === 'ADMIN' || role === 'NHOM_1' || role === 'KHTH') {
+      // Nếu là Quản trị viên, KHTH hoặc Nhóm KTBH (Tổ Rà Soát & Kế toán): Xem được tất cả thông báo của toàn viện
+      if (role === 'ADMIN' || role === 'NHOM_1' || role === 'KETOAN_BH' || role === 'KHTH') {
         return list;
       }
 
@@ -476,7 +476,7 @@ class NotificationService {
       const listStr = localStorage.getItem(PUSH_STORAGE_KEYS.INBOX);
       let list = listStr ? JSON.parse(listStr) : [];
       
-      if (!currentUser || currentUser.defaultRole === 'ADMIN' || currentUser.defaultRole === 'NHOM_1') {
+      if (!currentUser || currentUser.defaultRole === 'ADMIN' || currentUser.defaultRole === 'KETOAN_BH' || currentUser.defaultRole === 'NHOM_1' || currentUser.defaultRole === 'KHTH') {
         list = list.map(n => ({ ...n, isRead: true }));
       } else {
         const userName = (currentUser.name || '').trim().toLowerCase();

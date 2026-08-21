@@ -164,6 +164,7 @@ class SupabaseService {
     return {
       id: r.id,
       ngay_bao_cao: r.ngayBaoCao,
+      ngay_ra_vien: r.ngayRaVien || null,
       ma_kcb: r.maKCB,
       ten_benh_nhan: r.tenBenhNhan,
       ten_bac_si: r.tenBacSi,
@@ -184,6 +185,7 @@ class SupabaseService {
     return {
       id: row.id,
       ngayBaoCao: row.ngay_bao_cao || row.ngayBaoCao || '',
+      ngayRaVien: row.ngay_ra_vien || row.ngayRaVien || '',
       maKCB: row.ma_kcb || row.maKCB || '',
       tenBenhNhan: row.ten_benh_nhan || row.tenBenhNhan || '',
       tenBacSi: row.ten_bac_si || row.tenBacSi || '',

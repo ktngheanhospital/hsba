@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Theo dõi HSBA BV HNĐK NGHỆ AN - GĐ2</title>
   
-  <meta name="description" content="Hệ thống rà soát hồ sơ bệnh án, báo cáo và chốt ra viện 4 khâu chuyên môn - BV Hữu Nghị Đa Khoa Nghệ An - Giai đoạn 2." />
+  <meta name="description" content="Hệ thống rà soát hồ sơ bệnh án, báo cáo và chốt ra viện các khâu chuyên môn - BV Hữu Nghị Đa Khoa Nghệ An - Giai đoạn 2." />
   <meta name="theme-color" content="#0F766E" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2224%22 fill=%22%230F766E%22/><path d=%22M50 24 v52 M24 50 h52%22 stroke=%22white%22 stroke-width=%2212%22 stroke-linecap=%22round%22/></svg>">
 
@@ -16,6 +16,12 @@
 
   <!-- Supabase JS Client (Official CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- SheetJS / XLSX for Excel Export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- Chart.js for High Performance Interactive Comparison Visualizations -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <!-- Core Design System CSS -->
   <link rel="stylesheet" href="css/style.css" />
@@ -84,7 +90,6 @@
           <div class="brand-title-wrap">
             <div class="brand-name-row">
               <span class="brand-main-title">Theo dõi HSBA</span>
-              <span class="brand-version-tag">GĐ2</span>
             </div>
             <span class="brand-sub-title" id="header-hospital-subtitle">BV HNĐK NGHỆ AN</span>
           </div>
@@ -94,7 +99,7 @@
         <nav class="main-nav-bar" aria-label="Menu chức năng">
           <button class="nav-tab-btn nav-active" data-tab="records">
             <span class="nav-tab-icon">📋</span>
-            <span class="nav-tab-label">Danh sách lỗi</span>
+            <span class="nav-tab-label">Rà soát lỗi</span>
           </button>
 
           <button class="nav-tab-btn" data-tab="discharge">
@@ -113,14 +118,8 @@
           </button>
         </nav>
 
-        <!-- Right: Logged-in User Profile Badge, Switch Dropdown & Actions -->
+        <!-- Right: Logged-in User Profile Badge & Actions -->
         <div class="header-right-group">
-          
-          <!-- Cloud Database Status Pill -->
-          <div class="cloud-header-pill" id="header-cloud-status" title="Bấm để vào Cài đặt Cloud Supabase">
-            <span class="cloud-status-dot" id="header-cloud-dot"></span>
-            <span class="cloud-status-text" id="header-cloud-text">Cloud Sync</span>
-          </div>
 
           <!-- Notification Center Bell & Dropdown Flyout -->
           <div class="notification-center-wrap" id="notification-center-wrap">
@@ -177,11 +176,6 @@
               </div>
               <span class="user-profile-dept" id="header-user-dept">Khoa/Phòng</span>
             </div>
-            
-            <!-- Quick Switch User Dropdown for convenience -->
-            <select id="header-switch-user-select" class="header-switch-select" title="Đổi nhanh người dùng">
-              <!-- Rendered by JS -->
-            </select>
 
             <!-- Logout Button -->
             <button class="btn-header-logout" id="btn-header-logout" title="Đăng xuất khỏi hệ thống">
@@ -192,7 +186,7 @@
           <!-- Add Record Button -->
           <button class="btn btn-primary btn-add-desktop" id="btn-open-add-modal">
             <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
-            <span>Báo cáo lỗi mới</span>
+            <span>Thêm hồ sơ rà soát</span>
           </button>
         </div>
 
@@ -203,14 +197,14 @@
     <main class="main-body-content">
       <div class="app-container">
 
-        <!-- ==================== VIEW 1: DANH SÁCH LỖI (RECORDS) ==================== -->
+        <!-- ==================== VIEW 1: RÀ SOÁT LỖI (RECORDS) ==================== -->
         <section id="view-records" class="view-section">
           
           <!-- Mobile Action Bar for Error Reporting -->
           <div class="view-mobile-action-bar">
             <button type="button" class="btn btn-primary btn-mobile-primary-action" id="btn-open-add-modal-mobile">
               <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
-              <span>Báo cáo lỗi mới</span>
+              <span>Thêm hồ sơ rà soát</span>
             </button>
             <button type="button" class="btn btn-outline btn-mobile-toggle-filter" id="btn-toggle-filter-mobile" title="Mở rộng / Thu gọn bộ lọc nâng cao">
               <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clip-rule="evenodd"/></svg>
@@ -245,16 +239,6 @@
                 </div>
 
                 <div class="filter-field-unit">
-                  <label class="field-label-caption">Mức độ lỗi:</label>
-                  <input type="text" id="filter-status-input" list="dl-trang-thai" class="soft-form-control" placeholder="Tất cả mức độ lỗi..." />
-                  <datalist id="dl-trang-thai">
-                    <option value="Nhắc nhở">🟡 Nhắc nhở</option>
-                    <option value="Yêu cầu kiểm tra">🟣 Yêu cầu kiểm tra</option>
-                    <option value="Báo động">🚨 Báo động</option>
-                  </datalist>
-                </div>
-
-                <div class="filter-field-unit">
                   <label class="field-label-caption">Kiểm từ ngày:</label>
                   <input type="date" id="filter-from-date" class="soft-form-control" />
                 </div>
@@ -281,7 +265,6 @@
                     <option value="all">Toàn bộ thời gian (Tất cả)</option>
                   </select>
                   <strong class="count-badge-pill" id="records-total-count">0 lỗi</strong>
-                  <span class="text-caption text-muted">(Lỗi chưa hoàn thành ưu tiên lên đầu)</span>
                 </div>
                 <div class="filter-action-buttons">
                   <button class="btn btn-outline btn-sm" id="btn-export-excel" title="Xuất file CSV">
@@ -333,7 +316,6 @@
         <section id="view-discharge" class="view-section" style="display: none;">
           <div class="view-header-strip">
             <h2 class="view-main-title">Báo Cáo và Chốt Ra Viện</h2>
-            <p class="view-sub-title">Khoa phòng báo cáo ca ra viện hàng ngày & 4 Khâu kiểm lỗi: Dược, Kế toán BH, KHTH, IT</p>
           </div>
 
           <!-- Mobile Action Bar for Discharge Reporting -->
@@ -353,8 +335,7 @@
               <div class="batch-title-group">
                 <span class="batch-icon-badge">⚡</span>
                 <div>
-                  <h3 class="batch-title-text">Nhập nhanh danh sách ra viện trực tiếp (Nhiều ca cùng lúc):</h3>
-                  <p class="batch-desc-text">Phím <strong>Enter</strong> chuyển trường trong hàng; xong hàng bấm <strong>Enter</strong> tự tạo hàng mới</p>
+                  <h3 class="batch-title-text">Nhập danh sách ra viện:</h3>
                 </div>
               </div>
 
@@ -376,10 +357,11 @@
                 <thead>
                   <tr>
                     <th style="width: 38px;" class="text-center">#</th>
-                    <th style="width: 220px;">1. Mã KCB *</th>
-                    <th style="width: 280px;">2. Tên Bệnh nhân *</th>
-                    <th style="width: 240px;">3. Tên Bác sĩ điều trị</th>
-                    <th style="width: 190px;">4. Khoa / Phòng</th>
+                    <th style="width: 190px;">1. Mã KCB *</th>
+                    <th style="width: 230px;">2. Tên Bệnh nhân *</th>
+                    <th style="width: 190px;">3. Bác sĩ điều trị</th>
+                    <th style="width: 180px;">4. Ngày ra viện *</th>
+                    <th style="width: 170px;">5. Khoa / Phòng</th>
                     <th style="width: 44px;" class="text-center">Xóa</th>
                   </tr>
                 </thead>
@@ -443,10 +425,10 @@
               <thead>
                 <tr>
                   <th style="width: 38px;" class="text-center">#</th>
-                  <th style="width: 105px;" class="text-center">Ngày BC</th>
+                  <th style="width: 145px;" class="text-center">Ngày ra viện</th>
                   <th style="width: 180px;">Bệnh nhân & Mã KCB</th>
                   <th style="width: 175px;">Bác sĩ & Khoa</th>
-                  <th style="width: 235px;">4 Khâu kiểm lỗi chuyên môn</th>
+                  <th style="width: 235px;">Khâu kiểm lỗi chuyên môn</th>
                   <th>Báo cáo tình trạng sửa lỗi</th>
                   <th style="width: 125px;" class="text-center">Chốt thông cổng</th>
                   <th style="width: 65px;" class="text-center">Duyệt</th>
@@ -467,42 +449,109 @@
         <!-- ==================== VIEW 3: TỔNG QUAN DASHBOARD ==================== -->
         <section id="view-dashboard" class="view-section" style="display: none;">
           
-          <!-- Friendly Hero Greeting Box -->
+          <!-- Friendly Hero Greeting & Action Toolbar -->
           <div class="dashboard-hero-box">
             <div class="hero-text-side">
-              <h2 class="hero-title-text" id="dash-greeting-title">Chào buổi làm việc, Bác sĩ 👋</h2>
-              <p class="hero-sub-text">Theo dõi sát sao tiến độ sửa lỗi bệnh án, rà soát 4 khâu chuyên môn và chốt thông cổng ra viện hàng ngày.</p>
+              <h2 class="hero-title-text" id="dash-greeting-title">Tổng Quan Giám Sát & Chốt Ra Viện 👋</h2>
+              <p class="hero-sub-text">Thống kê toàn diện hồ sơ bệnh án ra viện, rà soát lỗi vi phạm Điều kiện 1 (16h01 ngày N) và Điều kiện 2 (16h01 ngày N+1).</p>
             </div>
-            <button class="btn btn-secondary btn-sm" id="btn-refresh-dashboard">
-              <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
-              <span>Làm mới số liệu</span>
-            </button>
+            <div class="hero-actions-side" style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="btn btn-primary btn-sm" id="btn-dash-export-excel">
+                <svg class="btn-svg-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                <span>Xuất Báo Cáo Excel</span>
+              </button>
+              <button class="btn btn-secondary btn-sm" id="btn-dash-export-pdf">
+                <svg class="btn-svg-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+                <span>In / Tải PDF</span>
+              </button>
+              <button class="btn btn-outline btn-sm" id="btn-refresh-dashboard" title="Tải lại số liệu mới nhất">
+                <svg class="btn-svg-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
+                <span>Làm mới</span>
+              </button>
+            </div>
           </div>
 
-          <!-- 4 Soft KPI Metric Cards -->
+          <!-- BỘ LỌC THỐNG KÊ THEO NGÀY, THÁNG, NĂM, TẤT CẢ -->
+          <div class="dashboard-timefilter-bar">
+            <div class="timefilter-left-col">
+              <span class="timefilter-title-label">⏱️ Lọc Thống Kê Theo:</span>
+              <div class="btn-group-segmented" id="dash-time-period-group">
+                <button class="btn-seg active" id="btn-time-day" onclick="window.hsbaApp.setDashboardTimeMode('DAY')">📅 Theo Ngày</button>
+                <button class="btn-seg" id="btn-time-month" onclick="window.hsbaApp.setDashboardTimeMode('MONTH')">📆 Theo Tháng</button>
+                <button class="btn-seg" id="btn-time-year" onclick="window.hsbaApp.setDashboardTimeMode('YEAR')">🗓️ Theo Năm</button>
+                <button class="btn-seg" id="btn-time-all" onclick="window.hsbaApp.setDashboardTimeMode('ALL')">🌐 Tất cả thời gian</button>
+              </div>
+            </div>
+
+            <!-- Dynamic Pickers & Filter Active Status -->
+            <div class="timefilter-right-col">
+              <!-- Day selector -->
+              <div id="dash-time-day-picker-box" class="time-picker-item" style="display: flex; gap: 6px; align-items: center;">
+                <input type="date" id="dash-time-input-day" class="form-control form-control-sm" style="width: 145px; height: 32px; font-size: 0.82rem;" onchange="window.hsbaApp.onDashboardTimeInputChange()" />
+                <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.setDashboardTimeToToday()">Hôm nay</button>
+                <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.setDashboardTimeToYesterday()">Hôm qua</button>
+              </div>
+
+              <!-- Month selector -->
+              <div id="dash-time-month-picker-box" class="time-picker-item" style="display: none; gap: 6px; align-items: center;">
+                <input type="month" id="dash-time-input-month" class="form-control form-control-sm" style="width: 145px; height: 32px; font-size: 0.82rem;" onchange="window.hsbaApp.onDashboardTimeInputChange()" />
+                <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.setDashboardTimeToThisMonth()">Tháng này</button>
+              </div>
+
+              <!-- Year selector -->
+              <div id="dash-time-year-picker-box" class="time-picker-item" style="display: none; gap: 6px; align-items: center;">
+                <select id="dash-time-input-year" class="form-control form-control-sm" style="width: 110px; height: 32px; font-size: 0.82rem;" onchange="window.hsbaApp.onDashboardTimeInputChange()">
+                  <!-- Populated by JS -->
+                </select>
+                <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.setDashboardTimeToThisYear()">Năm nay</button>
+              </div>
+
+              <div class="timefilter-badge-status" id="dash-time-filter-indicator">
+                <span class="pulse-dot"></span>
+                <span>Đang hiển thị: <strong id="dash-time-filter-text">Hôm nay (21/08/2026)</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 6 Soft KPI Metric Cards -->
           <div class="soft-kpi-grid">
+            <!-- 1. Tổng số hồ sơ bệnh án ra viện -->
             <div class="soft-kpi-card accent-teal">
               <div class="kpi-icon-pill">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
               </div>
               <div class="kpi-info-content">
-                <span class="kpi-label-caption">Tổng lỗi HSBA rà soát</span>
-                <h3 class="kpi-metric-number" id="dash-total-errors">0</h3>
-                <span class="kpi-footnote" id="dash-recent-10days">10 ngày gần đây</span>
+                <span class="kpi-label-caption">1. Tổng HSBA Ra Viện</span>
+                <h3 class="kpi-metric-number text-primary" id="dash-total-discharge">0</h3>
+                <span class="kpi-footnote" id="dash-discharge-depts-count">0 khoa có ca ra viện</span>
               </div>
             </div>
 
-            <div class="soft-kpi-card accent-rose">
+            <!-- 2. Lỗi theo Điều kiện 1 -->
+            <div class="soft-kpi-card accent-amber">
               <div class="kpi-icon-pill">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
               </div>
               <div class="kpi-info-content">
-                <span class="kpi-label-caption">Lỗi chưa khắc phục</span>
-                <h3 class="kpi-metric-number text-danger" id="dash-pending-errors">0</h3>
-                <span class="kpi-footnote text-danger font-medium" id="dash-urgent-count">0 lỗi khẩn cấp</span>
+                <span class="kpi-label-caption">2. Lỗi Điều Kiện 1 (16h01 N)</span>
+                <h3 class="kpi-metric-number text-warning" id="dash-err-dk1-count">0</h3>
+                <span class="kpi-footnote text-warning font-medium">Ra viện/chuyển trong ngày</span>
               </div>
             </div>
 
+            <!-- 3. Lỗi theo Điều kiện 2 -->
+            <div class="soft-kpi-card accent-rose">
+              <div class="kpi-icon-pill">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+              </div>
+              <div class="kpi-info-content">
+                <span class="kpi-label-caption">3. Lỗi Điều Kiện 2 (16h01 N+1)</span>
+                <h3 class="kpi-metric-number text-danger" id="dash-err-dk2-count">0</h3>
+                <span class="kpi-footnote text-danger font-medium">Chưa xong sau 16:01 N+1</span>
+              </div>
+            </div>
+
+            <!-- 4. Hồ sơ đã thông cổng -->
             <div class="soft-kpi-card accent-emerald">
               <div class="kpi-icon-pill">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
@@ -514,6 +563,19 @@
               </div>
             </div>
 
+            <!-- 5. Tổng lỗi HSBA rà soát -->
+            <div class="soft-kpi-card accent-sky">
+              <div class="kpi-icon-pill">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+              </div>
+              <div class="kpi-info-content">
+                <span class="kpi-label-caption">Tổng Lỗi Rà Soát</span>
+                <h3 class="kpi-metric-number text-slate-800" id="dash-total-errors">0</h3>
+                <span class="kpi-footnote" id="dash-pending-errors">0 lỗi chưa hoàn thành</span>
+              </div>
+            </div>
+
+            <!-- 6. Thông báo đẩy Zalo/Push -->
             <div class="soft-kpi-card accent-purple">
               <div class="kpi-icon-pill">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/></svg>
@@ -526,24 +588,234 @@
             </div>
           </div>
 
-          <!-- Two Detail Breakdown Panels -->
-          <div class="dashboard-details-grid">
-            <div class="soft-card-panel">
-              <div class="panel-header-strip">
-                <h4 class="panel-header-title">Tình hình 4 Khâu Kiểm Lỗi Ra Viện</h4>
+          <!-- ==================== SECTION 1: THỐNG KÊ HSBA RA VIỆN TỪNG KHOA ==================== -->
+          <div class="soft-card-panel" style="margin-bottom: 1.25rem;">
+            <div class="panel-header-strip">
+              <div>
+                <h4 class="panel-header-title">🏥 1. Thống Kê Số Lượng Hồ Sơ Bệnh Án Ra Viện & Tỷ Lệ Lỗi Từng Khoa</h4>
+                <p class="text-xs text-muted" style="margin-top: 2px;">Theo dõi số lượng ca ra viện, tỷ lệ duyệt thông cổng và các lỗi tồn đọng chi tiết từng khoa/phòng</p>
               </div>
-              <div class="panel-body-area" id="dash-steps-summary-container">
-                <!-- Rendered by JS -->
+            </div>
+            <div class="panel-body-area" style="padding: 0;">
+              <div class="table-container" style="border: none; border-radius: 0;">
+                <table class="data-table" id="dash-dept-discharge-table">
+                  <thead>
+                    <tr>
+                      <th class="text-center" style="width: 50px;">STT</th>
+                      <th>KHOA / PHÒNG</th>
+                      <th class="text-center" style="width: 130px;">TỔNG HSBA RA VIỆN</th>
+                      <th class="text-center" style="width: 140px;">ĐÃ THÔNG CỔNG</th>
+                      <th class="text-center" style="width: 130px;">CHƯA THÔNG CỔNG</th>
+                      <th class="text-center" style="width: 140px;">LỖI ĐIỀU KIỆN 1 (16h01 N)</th>
+                      <th class="text-center" style="width: 150px;">LỖI ĐIỀU KIỆN 2 (16h01 N+1)</th>
+                      <th class="text-center" style="width: 120px;">LỖI CHƯA SỬA</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dash-dept-discharge-body">
+                    <!-- Rendered by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- ==================== SECTION 2: BẢNG RÀ SOÁT LỖI ĐIỀU KIỆN 1 & ĐIỀU KIỆN 2 ==================== -->
+          <div class="soft-card-panel" style="margin-bottom: 1.25rem;">
+            <div class="panel-header-strip">
+              <div>
+                <h4 class="panel-header-title">⚠️ 2 & 3. Rà Soát Lỗi Hồ Sơ Bệnh Án Theo Điều Kiện 1 và Điều Kiện 2</h4>
+                <p class="text-xs text-muted" style="margin-top: 2px;">Khớp nối Mã KCB giữa Danh sách lỗi & Hồ sơ ra viện. Xét mốc 16h01 ngày N (Điều kiện 1) và 16h01 ngày N+1 (Điều kiện 2).</p>
+              </div>
+
+              <!-- Filter tabs for Condition Errors -->
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <div class="btn-group-segmented">
+                  <button class="btn-seg active" id="btn-filter-cond-all" onclick="window.hsbaApp.filterConditionErrors('ALL')">Tất cả (ĐK1 & ĐK2)</button>
+                  <button class="btn-seg" id="btn-filter-cond-dk1" onclick="window.hsbaApp.filterConditionErrors('DK1')">Lỗi ĐK 1 (16h01 N)</button>
+                  <button class="btn-seg" id="btn-filter-cond-dk2" onclick="window.hsbaApp.filterConditionErrors('DK2')">Lỗi ĐK 2 (16h01 N+1)</button>
+                </div>
               </div>
             </div>
 
-            <div class="soft-card-panel">
-              <div class="panel-header-strip">
-                <h4 class="panel-header-title">Thống kê lỗi theo Khoa / Phòng</h4>
+            <!-- Condition description banner -->
+            <div style="padding: 10px 16px; background: #fffbeb; border-bottom: 1px solid #fde68a; display: flex; gap: 16px; font-size: 0.8rem; color: #92400e; flex-wrap: wrap;">
+              <div><strong>📌 Điều kiện 1:</strong> Xét hồ sơ chuyển viện hoặc ra viện trong ngày, chưa xong tại 16h01 cùng ngày (ngày N).</div>
+              <div><strong>📌 Điều kiện 2:</strong> Khớp Mã KCB hồ sơ ra viện, xét tại 16h01 ngày hôm sau (ngày N+1), chưa 'ĐÃ XONG'.</div>
+            </div>
+
+            <div class="panel-body-area" style="padding: 0;">
+              <div class="table-container" style="border: none; border-radius: 0; max-height: 420px; overflow-y: auto;">
+                <table class="data-table" id="dash-condition-table">
+                  <thead>
+                    <tr>
+                      <th class="text-center" style="width: 45px;">STT</th>
+                      <th style="width: 140px;">NHÓM ĐIỀU KIỆN</th>
+                      <th style="width: 120px;">MÃ KCB</th>
+                      <th>BỆNH NHÂN</th>
+                      <th>KHOA / PHÒNG</th>
+                      <th>NGƯỜI RA Y LỆNH</th>
+                      <th class="text-center" style="width: 110px;">NGÀY RA VIỆN</th>
+                      <th class="text-center" style="width: 130px;">MỐC XÉT CHỐT</th>
+                      <th class="text-center" style="width: 110px;">TIẾN ĐỘ SỬA</th>
+                      <th>DIỄN GIẢI LỖI</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dash-condition-errors-body">
+                    <!-- Rendered by JS -->
+                  </tbody>
+                </table>
               </div>
-              <div class="panel-body-area" id="dash-dept-stats-container">
-                <!-- Rendered by JS -->
+            </div>
+          </div>
+
+          <!-- ==================== SECTION 3: DANH SÁCH NGƯỜI PHẠM LỖI & THEO KHOA ==================== -->
+          <div class="soft-card-panel" style="margin-bottom: 1.25rem;">
+            <div class="panel-header-strip" style="flex-wrap: wrap; gap: 12px;">
+              <div>
+                <h4 class="panel-header-title">👨‍⚕️ 4. Danh Sách Bác Sĩ / Người Ra Y Lệnh Phạm Lỗi & Theo Khoa Phòng</h4>
+                <p class="text-xs text-muted" style="margin-top: 2px;">Thống kê số lượng và chi tiết các lỗi kèm theo. Những lỗi không có tên BS sẽ hiển thị tên Khoa/phòng.</p>
               </div>
+
+              <!-- View Switch & Filters -->
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <!-- View Mode Toggle: Theo BS vs Theo Khoa -->
+                <div class="btn-group-segmented">
+                  <button class="btn-seg active" id="btn-violator-mode-doctor" onclick="window.hsbaApp.setViolatorViewMode('DOCTOR')">👨‍⚕️ Theo Người phạm lỗi</button>
+                  <button class="btn-seg" id="btn-violator-mode-dept" onclick="window.hsbaApp.setViolatorViewMode('DEPT')">🏥 Theo Khoa / Phòng</button>
+                </div>
+
+                <!-- Dropdown lọc Khoa -->
+                <select id="dash-violator-dept-filter" class="form-control" style="width: 170px; height: 32px; font-size: 0.8rem;" onchange="window.hsbaApp.renderViolatorsList()">
+                  <option value="">-- Tất cả Khoa --</option>
+                  <!-- Populated by JS -->
+                </select>
+
+                <!-- Filter theo loại lỗi -->
+                <select id="dash-violator-type-filter" class="form-control" style="width: 150px; height: 32px; font-size: 0.8rem;" onchange="window.hsbaApp.renderViolatorsList()">
+                  <option value="ALL">Tất cả lỗi</option>
+                  <option value="DK1">Chỉ có Lỗi ĐK 1</option>
+                  <option value="DK2">Chỉ có Lỗi ĐK 2</option>
+                  <option value="UNRESOLVED">Chưa khắc phục</option>
+                </select>
+
+                <!-- Ô tìm kiếm -->
+                <input type="text" id="dash-violator-search" class="form-control" placeholder="🔍 Tìm tên BS / Khoa..." style="width: 170px; height: 32px; font-size: 0.8rem;" oninput="window.hsbaApp.renderViolatorsList()" />
+              </div>
+            </div>
+
+            <div class="panel-body-area" id="dash-violators-list-container">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+
+          <!-- ==================== SECTION 4: TÌNH HÌNH CÁC KHÂU KIỂM LỖI ==================== -->
+          <div class="soft-card-panel" style="margin-bottom: 1.25rem;">
+            <div class="panel-header-strip">
+              <h4 class="panel-header-title">📋 Tình Hình Kiểm Lỗi Các Khâu Chuyên Môn (Dược, Kế Toán BH, KHTH)</h4>
+            </div>
+            <div class="panel-body-area" id="dash-steps-summary-container">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+
+          <!-- ==================== SECTION 5: BIỂU ĐỒ SO SÁNH TRỰC QUAN (CHART) ==================== -->
+          <div class="soft-card-panel" id="dash-comparison-chart-section">
+            <div class="panel-header-strip" style="flex-wrap: wrap; gap: 12px;">
+              <div>
+                <h4 class="panel-header-title">📊 5. Biểu Đồ So Sánh Trực Quan Chỉ Số Theo Khoa / Phòng & Bác Sĩ</h4>
+                <p class="text-xs text-muted" style="margin-top: 2px;">
+                  Trực quan hóa so sánh đa chiều theo thời gian (<span id="dash-chart-time-label" class="font-semibold text-primary">Hôm nay</span>). Tùy chọn số lượng khoa, bác sĩ và chọn các chỉ số đưa vào biểu đồ.
+                </p>
+              </div>
+
+              <!-- Main Mode & Chart Type Switchers & Export Tools -->
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <!-- Entity View Mode -->
+                <div class="btn-group-segmented">
+                  <button class="btn-seg active" id="btn-chart-mode-dept" onclick="window.hsbaApp.setChartEntityMode('DEPT')">🏥 Theo Khoa / Phòng</button>
+                  <button class="btn-seg" id="btn-chart-mode-doctor" onclick="window.hsbaApp.setChartEntityMode('DOCTOR')">👨‍⚕️ Theo Bác Sĩ</button>
+                </div>
+
+                <!-- Chart Type Selector -->
+                <div class="btn-group-segmented">
+                  <button class="btn-seg active" id="btn-chart-type-bar" onclick="window.hsbaApp.setChartVisualType('bar')" title="Biểu đồ cột đứng">📊 Cột dọc</button>
+                  <button class="btn-seg" id="btn-chart-type-hbar" onclick="window.hsbaApp.setChartVisualType('hbar')" title="Biểu đồ cột ngang">📋 Cột ngang</button>
+                  <button class="btn-seg" id="btn-chart-type-line" onclick="window.hsbaApp.setChartVisualType('line')" title="Biểu đồ đường">📈 Đường</button>
+                </div>
+
+                <!-- Chart Quick Export Actions -->
+                <div style="display: flex; gap: 6px;">
+                  <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.downloadChartImage()" title="Tải ảnh biểu đồ PNG chất lượng cao để chèn Word, PowerPoint">
+                    <svg class="btn-svg-icon" style="width: 13px; height: 13px;" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/></svg>
+                    <span>Tải ảnh PNG</span>
+                  </button>
+                  <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.exportDashboardPDF()" title="In hoặc lưu PDF báo cáo có chứa hình ảnh biểu đồ">
+                    <svg class="btn-svg-icon" style="width: 13px; height: 13px;" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+                    <span>Xuất PDF có biểu đồ</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel-body-area" style="padding: 1.25rem;">
+              
+              <!-- 1. Bộ chọn chỉ số so sánh (Metrics Selector) -->
+              <div class="chart-controls-box" style="margin-bottom: 1rem;">
+                <div class="chart-ctrl-header">
+                  <span class="chart-ctrl-title">📌 Chọn các chỉ số đưa vào biểu đồ:</span>
+                  <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                    <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.selectAllChartMetrics()">Chọn tất cả</button>
+                    <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.resetDefaultChartMetrics()">Mặc định</button>
+                    <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.selectErrorsOnlyChartMetrics()">Chỉ lỗi (ĐK1, ĐK2)</button>
+                    <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.selectDischargeOnlyChartMetrics()">Chỉ ra viện</button>
+                  </div>
+                </div>
+
+                <div class="metric-checkboxes-grid" id="chart-metrics-container">
+                  <!-- Checkbox items for metrics rendered by JS -->
+                </div>
+              </div>
+
+              <!-- 2. Bộ chọn đối tượng so sánh (Khoa/Phòng hoặc Bác Sĩ Selector) -->
+              <div class="chart-controls-box" style="margin-bottom: 1.25rem;">
+                <div class="chart-ctrl-header" style="flex-wrap: wrap; gap: 8px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="chart-ctrl-title" id="chart-entity-title">🏥 Chọn Khoa / Phòng so sánh:</span>
+                    <span class="badge-tag badge-status-neutral" id="chart-entity-count-badge">0 đã chọn</span>
+                  </div>
+                  
+                  <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                    <input type="text" id="chart-entity-search" class="form-control form-control-sm" placeholder="🔍 Tìm kiếm..." style="width: 160px; height: 28px; font-size: 0.76rem;" oninput="window.hsbaApp.renderChartEntityCheckboxes()" />
+                    <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.selectAllChartEntities()">Chọn tất cả</button>
+                    <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.selectTopErrorsChartEntities(5)">Top 5 nhiều lỗi</button>
+                    <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.selectTopDischargeChartEntities(5)">Top 5 ra viện</button>
+                    <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.clearAllChartEntities()">Bỏ chọn hết</button>
+                  </div>
+                </div>
+
+                <div class="entity-checkboxes-list" id="chart-entities-container">
+                  <!-- Checkbox items for entities rendered by JS -->
+                </div>
+              </div>
+
+              <!-- 3. Khu vực vẽ biểu đồ Canvas -->
+              <div class="chart-canvas-wrapper" style="position: relative; min-height: 400px; width: 100%; background: #ffffff; border-radius: 6px; padding: 12px; border: 1px solid var(--border-soft);">
+                <canvas id="dashboard-comparison-chart"></canvas>
+              </div>
+
+              <!-- 4. Collapsible Data Matrix Table -->
+              <div style="margin-top: 1.25rem; border-top: 1px solid var(--border-soft); padding-top: 0.75rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span class="text-xs font-semibold text-slate-700">📑 Bảng số liệu chi tiết đối chiếu:</span>
+                  <button class="btn btn-xs btn-outline" id="btn-toggle-chart-table" onclick="window.hsbaApp.toggleChartDataTable()">
+                    ▼ Hiện bảng số liệu
+                  </button>
+                </div>
+                <div id="chart-data-table-container" style="display: none; margin-top: 0.75rem;">
+                  <!-- Rendered by JS -->
+                </div>
+              </div>
+
             </div>
           </div>
         </section>
@@ -712,7 +984,7 @@
             <div id="settings-sec-permissions" class="settings-pane" style="display: none;">
               <div class="soft-card-panel" style="margin-bottom: 1rem;">
                 <div class="panel-header-strip">
-                  <h4 class="panel-header-title">Quy chế Phân quyền Chuyên môn 4 Khâu & Chốt Ra Viện</h4>
+                  <h4 class="panel-header-title">Quy chế Phân quyền Chuyên môn Các Khâu & Chốt Ra Viện</h4>
                 </div>
                 <div class="panel-body-area">
                   <div class="role-grid-boxes">
@@ -721,16 +993,12 @@
                       <p class="text-xs text-muted" style="margin-top: 4px;">Độc quyền duyệt: Khâu Dược (Thuốc, VTYT, Kháng sinh).</p>
                     </div>
                     <div class="role-box-card border-ketoan">
-                      <strong>💵 Kế toán BHYT</strong>
-                      <p class="text-xs text-muted" style="margin-top: 4px;">Độc quyền duyệt: Khâu Kế toán BH (Viện phí, Mức hưởng BHYT).</p>
+                      <strong>💵 Nhóm KTBH (Tổ RS & Kế toán BHYT)</strong>
+                      <p class="text-xs text-muted" style="margin-top: 4px;">Rà soát thông tin lỗi, ấn định Mức độ lỗi & khâu KTBH tự động đối soát theo mã KCB.</p>
                     </div>
                     <div class="role-box-card border-khth">
                       <strong>📋 Kế hoạch Tổng hợp</strong>
                       <p class="text-xs text-muted" style="margin-top: 4px;">Độc quyền duyệt: Khâu KHTH & Độc quyền Chốt thông cổng ra viện.</p>
-                    </div>
-                    <div class="role-box-card border-it">
-                      <strong>💻 Phòng CNTT</strong>
-                      <p class="text-xs text-muted" style="margin-top: 4px;">Độc quyền duyệt: Khâu IT & Cài đặt hệ thống.</p>
                     </div>
                     <div class="role-box-card border-nhom2">
                       <strong>👨‍⚕️ Khoa / Bác sĩ</strong>
@@ -764,10 +1032,9 @@
                         <th style="width: 240px;">Tác vụ / Chức năng</th>
                         <th>Mô tả quy định</th>
                         <th style="width: 90px;" class="text-center">💊 Dược</th>
-                        <th style="width: 90px;" class="text-center">💵 KT-BH</th>
+                        <th style="width: 100px;" class="text-center">💵 Nhóm KTBH</th>
                         <th style="width: 90px;" class="text-center">📋 KHTH</th>
                         <th style="width: 80px;" class="text-center">💻 IT</th>
-                        <th style="width: 100px;" class="text-center">🔍 Tổ RS</th>
                         <th style="width: 100px;" class="text-center">👨‍⚕️ Khoa/BS</th>
                       </tr>
                     </thead>
@@ -813,13 +1080,14 @@
                   <table class="clinical-data-table">
                     <thead>
                       <tr>
-                        <th style="width: 45px;" class="text-center">STT</th>
+                        <th style="width: 40px;" class="text-center">STT</th>
                         <th>Họ và Tên Nhân viên</th>
-                        <th style="width: 190px;">Khoa / Phòng</th>
-                        <th style="width: 150px;">Chức danh</th>
-                        <th style="width: 120px;">Số ĐT</th>
-                        <th style="width: 140px;">Thông Báo Đẩy</th>
-                        <th style="width: 150px;">Vai trò mặc định</th>
+                        <th style="width: 140px;">Tài khoản</th>
+                        <th style="width: 180px;">Khoa / Phòng</th>
+                        <th style="width: 140px;">Chức danh</th>
+                        <th style="width: 110px;">Số ĐT</th>
+                        <th style="width: 130px;">Thông Báo Đẩy</th>
+                        <th style="width: 150px;">Vai trò & Phân quyền</th>
                         <th style="width: 90px;" class="text-center">Thao tác</th>
                       </tr>
                     </thead>

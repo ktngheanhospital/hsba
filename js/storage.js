@@ -66,13 +66,23 @@ export class StorageService {
         // Giữ lại các nhân sự do người dùng tự tạo mới (không nằm trong list mock cũ)
         const customStaff = staff.filter(s => !legacyMockStaffIds.includes(s.id) && !s.id.startsWith('NV_'));
         this.saveStaff([...DEFAULT_STAFF, ...customStaff]);
+      } else {
+        // Đảm bảo không còn role NHOM_1 cũ trong danh sách
+        const hasLegacyRole = staff.some(s => s.defaultRole === 'NHOM_1');
+        if (hasLegacyRole) {
+          this.saveStaff(staff.map(s => s.defaultRole === 'NHOM_1' ? { ...s, defaultRole: 'KETOAN_BH' } : s));
+        }
       }
 
-      // Cập nhật người dùng hiện tại nếu đang là user mock cũ
+      // Cập nhật người dùng hiện tại nếu đang là user mock cũ hoặc có role NHOM_1
       const currentUser = this.getCurrentUser();
-      if (currentUser && (legacyMockStaffIds.includes(currentUser.id) || (currentUser.name && currentUser.name.includes('Trần Thị Mai')))) {
-        const cleanUser = DEFAULT_STAFF.find(s => s.defaultRole === currentUser.defaultRole) || DEFAULT_STAFF[0];
-        this.setCurrentUser(cleanUser);
+      if (currentUser) {
+        if (legacyMockStaffIds.includes(currentUser.id) || (currentUser.name && currentUser.name.includes('Trần Thị Mai'))) {
+          const cleanUser = DEFAULT_STAFF.find(s => s.defaultRole === currentUser.defaultRole) || DEFAULT_STAFF[0];
+          this.setCurrentUser(cleanUser);
+        } else if (currentUser.defaultRole === 'NHOM_1') {
+          this.setCurrentUser({ ...currentUser, defaultRole: 'KETOAN_BH' });
+        }
       }
     } catch (e) {
       console.warn('Lỗi khi dọn dẹp mockup:', e);
@@ -157,10 +167,10 @@ export class StorageService {
   setCurrentUser(user) {
     if (user) {
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
-      // Tự động đồng bộ vai trò và khoa phòng công tác
-      if (user.defaultRole) {
-        this.setCurrentRole(user.defaultRole);
-      }
+      // Tự động đồng bộ vai trò và khoa phòng công tác theo đúng Profile của tài khoản
+      const roleToSet = user.defaultRole && ROLES[user.defaultRole] ? user.defaultRole : 'NHOM_2';
+      this.setCurrentRole(roleToSet);
+      
       if (user.department) {
         this.setActiveDepartment(user.department);
       }
@@ -170,27 +180,29 @@ export class StorageService {
   }
 
   login(username, password) {
-    if (!username || !password) {
-      return { success: false, message: 'Vui lòng nhập tên đăng nhập và mật khẩu!' };
+    if (!username) {
+      return { success: false, message: 'Vui lòng nhập tên đăng nhập hoặc số điện thoại!' };
     }
 
     const cleanUser = username.trim().toLowerCase();
     const staffList = this.getStaff();
 
-    // Tìm theo username hoặc số điện thoại
+    // Tìm chính xác theo username, số điện thoại, mã nhân viên (id) hoặc tên
     const staff = staffList.find(s => 
       (s.username && s.username.toLowerCase() === cleanUser) ||
-      (s.phone && s.phone.replace(/[^0-9]/g, '') === cleanUser.replace(/[^0-9]/g, ''))
+      (s.phone && s.phone.replace(/[^0-9]/g, '') === cleanUser.replace(/[^0-9]/g, '')) ||
+      (s.id && s.id.toLowerCase() === cleanUser) ||
+      (s.name && s.name.toLowerCase() === cleanUser)
     );
 
     if (!staff) {
-      return { success: false, message: 'Tài khoản không tồn tại trong hệ thống!' };
+      return { success: false, message: 'Tài khoản không tồn tại trong hệ thống! Vui lòng chọn tài khoản mẫu bên dưới.' };
     }
 
     // Kiểm tra mật khẩu (mặc định '123' hoặc khớp password đã lưu)
     const expectedPass = staff.password || '123';
-    if (password !== expectedPass && password !== '123' && password !== 'admin123') {
-      return { success: false, message: 'Mật khẩu không chính xác!' };
+    if (password && password !== expectedPass && password !== '123' && password !== 'admin123') {
+      return { success: false, message: 'Mật khẩu không chính xác! (Mật khẩu mặc định: 123)' };
     }
 
     this.setCurrentUser(staff);
@@ -209,6 +221,7 @@ export class StorageService {
 
   logout() {
     localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+    localStorage.removeItem(STORAGE_KEYS.CURRENT_ROLE);
     return true;
   }
 
@@ -263,7 +276,7 @@ export class StorageService {
     return ROLES[activeRoleId] || ROLES.ADMIN;
   }
 
-  // PHÂN QUYỀN 4 KHÂU KIỂM LỖI CHUYÊN MÔN:
+  // PHÂN QUYỀN CÁC KHÂU KIỂM LỖI CHUYÊN MÔN:
   canCheckDischargeStep(stepKey, roleId = null) {
     const activeRole = roleId || this.getCurrentRole();
     if (activeRole === 'ADMIN') return true;
@@ -273,17 +286,15 @@ export class StorageService {
     if (stepKey === 'duoc') permKey = 'kiemDuoc';
     else if (stepKey === 'ketoan') permKey = 'kiemKeToanBH';
     else if (stepKey === 'khth') permKey = 'kiemKHTH';
-    else if (stepKey === 'it') permKey = 'kiemIT';
 
     const perm = matrix.find(p => p.key === permKey);
     if (!perm) return false;
 
     if (activeRole === 'DUOC') return !!perm.duoc;
-    if (activeRole === 'KETOAN_BH') return !!perm.ketoan;
+    if (activeRole === 'KETOAN_BH' || activeRole === 'NHOM_1') return !!perm.ketoan;
     if (activeRole === 'KHTH') return !!perm.khth;
-    if (activeRole === 'IT') return !!perm.it;
+    if (activeRole === 'IT') return false;
     if (activeRole === 'NHOM_2') return !!perm.nhom2;
-    if (activeRole === 'NHOM_1') return !!perm.nhom1;
 
     return false;
   }
@@ -333,10 +344,9 @@ export class StorageService {
     if (!perm) return true;
 
     if (activeRoleId === 'DUOC') return !!perm.duoc;
-    if (activeRoleId === 'KETOAN_BH') return !!perm.ketoan;
+    if (activeRoleId === 'KETOAN_BH' || activeRoleId === 'NHOM_1') return !!perm.ketoan;
     if (activeRoleId === 'KHTH') return !!perm.khth;
     if (activeRoleId === 'IT') return !!perm.it;
-    if (activeRoleId === 'NHOM_1') return !!perm.nhom1;
     if (activeRoleId === 'NHOM_2') return !!perm.nhom2;
 
     return false;
@@ -352,6 +362,24 @@ export class StorageService {
     const activeRoleId = roleId || this.getCurrentRole();
     const role = ROLES[activeRoleId] || ROLES.ADMIN;
     return !!role.canDeleteError;
+  }
+
+  // PHÂN QUYỀN ĐỘC QUYỀN XÓA BÁO CÁO RA VIỆN (CHỈ NHÓM KHOA/BÁC SĨ & ADMIN):
+  canDeleteDischargeReport(roleId = null) {
+    const activeRoleId = roleId || this.getCurrentRole();
+    if (activeRoleId === 'ADMIN') return true;
+
+    const matrix = this.getPermissionsMatrix();
+    const perm = matrix.find(p => p.key === 'xoaBaoCaoRaVien');
+    if (perm) {
+      if (activeRoleId === 'DUOC') return !!perm.duoc;
+      if (activeRoleId === 'KETOAN_BH' || activeRoleId === 'NHOM_1') return !!perm.ketoan;
+      if (activeRoleId === 'KHTH') return !!perm.khth;
+      if (activeRoleId === 'IT') return !!perm.it;
+      if (activeRoleId === 'NHOM_2') return !!perm.nhom2;
+    }
+
+    return activeRoleId === 'NHOM_2';
   }
 
   getPermissionsMatrix() {
@@ -447,6 +475,7 @@ export class StorageService {
 
     records.unshift(newRecord);
     this.saveRecords(records);
+    this.syncDischargeReportsKetoan(newRecord.maKCB);
     supabaseService.upsertRecord(newRecord);
     return newRecord;
   }
@@ -464,6 +493,7 @@ export class StorageService {
     };
 
     this.saveRecords(records);
+    this.syncDischargeReportsKetoan(records[index].maKCB);
     supabaseService.upsertRecord(records[index]);
     return records[index];
   }
@@ -471,20 +501,76 @@ export class StorageService {
   deleteRecord(recordId) {
     let records = this.getRecords();
     const initialLen = records.length;
+    const targetRecord = records.find(r => r.id === recordId);
+    const targetMaKCB = targetRecord ? targetRecord.maKCB : null;
     records = records.filter(r => r.id !== recordId);
     if (records.length !== initialLen) {
       this.saveRecords(records);
+      if (targetMaKCB) {
+        this.syncDischargeReportsKetoan(targetMaKCB);
+      }
       supabaseService.deleteRecord(recordId);
       return true;
     }
     return false;
   }
 
+  // Tự động kiểm tra trạng thái KT-BH từ Danh sách lỗi dựa theo mã KCB:
+  // Nếu "Mức độ lỗi" là "Không có lỗi" -> "Đã kiểm, không lỗi" (KHONG_LOI), ngược lại -> "Có lỗi" (CO_LOI)
+  evaluateKetoanStatusFromRecords(maKCB) {
+    if (!maKCB) return { status: 'CO_LOI', note: '' };
+    const key = maKCB.trim().toLowerCase();
+    const records = this.getRecords();
+    const matched = records.filter(r => (r.maKCB || '').trim().toLowerCase() === key);
+    if (matched.length === 0) {
+      return { status: 'CO_LOI', note: '' };
+    }
+
+    // Kiểm tra xem các bản ghi rà soát có lỗi hay không
+    const errorRecords = matched.filter(r => {
+      const lvl = (r.mucDoLoi || r.mucDoCanhBao || '').trim();
+      return lvl !== 'Không có lỗi' && lvl !== 'KHONG_CO_LOI' && lvl !== 'KHÔNG CÓ LỖI';
+    });
+
+    if (errorRecords.length === 0) {
+      return { status: 'KHONG_LOI', note: 'Rà soát: Không có lỗi' };
+    } else {
+      const notes = errorRecords.map(r => r.dienGiaiLoi || r.mucDoLoi).filter(Boolean).join('; ');
+      return { status: 'CO_LOI', note: notes || 'Có lỗi rà soát' };
+    }
+  }
+
+  syncDischargeReportsKetoan(targetMaKCB = null) {
+    const reports = this.getDischargeReports();
+    if (!reports.length) return;
+    let changed = false;
+
+    reports.forEach(rep => {
+      if (!rep.maKCB) return;
+      if (!targetMaKCB || (rep.maKCB.trim().toLowerCase() === targetMaKCB.trim().toLowerCase())) {
+        const calculated = this.evaluateKetoanStatusFromRecords(rep.maKCB);
+        const records = this.getRecords();
+        const hasMatchedRecord = records.some(r => (r.maKCB || '').trim().toLowerCase() === rep.maKCB.trim().toLowerCase());
+        if (hasMatchedRecord) {
+          if (!rep.kiemKeToanBH || rep.kiemKeToanBH.status !== calculated.status || rep.kiemKeToanBH.note !== calculated.note) {
+            rep.kiemKeToanBH = calculated;
+            changed = true;
+          }
+        }
+      }
+    });
+
+    if (changed) {
+      this.saveDischargeReports(reports);
+    }
+  }
+
   // --- QUẢN LÝ BÁO CÁO VÀ CHỐT RA VIỆN HÀNG NGÀY (DISCHARGE REPORTS) ---
   getDischargeReports() {
     try {
       const reportsJson = localStorage.getItem(STORAGE_KEYS.DISCHARGE_REPORTS);
-      return reportsJson ? JSON.parse(reportsJson) : [];
+      const reports = reportsJson ? JSON.parse(reportsJson) : [];
+      return reports;
     } catch (e) {
       console.error('Lỗi khi đọc báo cáo ra viện:', e);
       return [];
@@ -504,18 +590,38 @@ export class StorageService {
   addDischargeReport(reportData) {
     const reports = this.getDischargeReports();
     const newId = 'BCRV-' + Date.now().toString(36).toUpperCase();
+    const today = new Date().toISOString().slice(0, 10);
+    const reportDate = reportData.ngayBaoCao || today;
+
+    // Tính thời gian ra viện mặc định 8h30 ngày N+1 nếu chưa truyền vào
+    let defaultDischargeTime = '';
+    try {
+      const parts = reportDate.split('-');
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        d.setDate(d.getDate() + 1);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const dt = String(d.getDate()).padStart(2, '0');
+        defaultDischargeTime = `${y}-${m}-${dt}T08:30`;
+      }
+    } catch (e) {
+      defaultDischargeTime = `${reportDate}T08:30`;
+    }
+
+    const autoKetoan = this.evaluateKetoanStatusFromRecords(reportData.maKCB);
 
     const newReport = {
       id: newId,
-      ngayBaoCao: reportData.ngayBaoCao || new Date().toISOString().slice(0, 10),
+      ngayBaoCao: reportDate,
+      ngayRaVien: reportData.ngayRaVien || defaultDischargeTime,
       maKCB: reportData.maKCB || '',
       tenBenhNhan: reportData.tenBenhNhan || '',
       tenBacSi: reportData.tenBacSi || '',
       phong: reportData.phong || this.getActiveDepartment(),
       kiemDuoc: reportData.kiemDuoc || { status: 'CO_LOI', note: '' },
-      kiemKeToanBH: reportData.kiemKeToanBH || { status: 'CO_LOI', note: '' },
+      kiemKeToanBH: (reportData.kiemKeToanBH && reportData.kiemKeToanBH.status !== 'CO_LOI') ? reportData.kiemKeToanBH : autoKetoan,
       kiemKHTH: reportData.kiemKHTH || { status: 'CO_LOI', note: '' },
-      kiemIT: reportData.kiemIT || { status: 'CO_LOI', note: '' },
       baoCaoTinhTrangSuaLoi: reportData.baoCaoTinhTrangSuaLoi || '',
       chotThongCong: reportData.chotThongCong || 'CHUA',
       ngayThongCong: reportData.ngayThongCong || null,
@@ -538,17 +644,36 @@ export class StorageService {
     reportsList.forEach((item, idx) => {
       if (item.maKCB && item.tenBenhNhan) {
         const newId = 'BCRV-' + (Date.now() + idx).toString(36).toUpperCase();
+        const reportDate = item.ngayBaoCao || today;
+
+        let defaultDischargeTime = '';
+        try {
+          const parts = reportDate.split('-');
+          if (parts.length === 3) {
+            const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            d.setDate(d.getDate() + 1);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const dt = String(d.getDate()).padStart(2, '0');
+            defaultDischargeTime = `${y}-${m}-${dt}T08:30`;
+          }
+        } catch (e) {
+          defaultDischargeTime = `${reportDate}T08:30`;
+        }
+
+        const autoKetoan = this.evaluateKetoanStatusFromRecords(item.maKCB);
+
         const newRep = {
           id: newId,
-          ngayBaoCao: item.ngayBaoCao || today,
+          ngayBaoCao: reportDate,
+          ngayRaVien: item.ngayRaVien || defaultDischargeTime,
           maKCB: item.maKCB.trim(),
           tenBenhNhan: item.tenBenhNhan.trim(),
           tenBacSi: (item.tenBacSi || '').trim(),
           phong: item.phong || activeDept,
           kiemDuoc: { status: 'CO_LOI', note: '' },
-          kiemKeToanBH: { status: 'CO_LOI', note: '' },
+          kiemKeToanBH: autoKetoan,
           kiemKHTH: { status: 'CO_LOI', note: '' },
-          kiemIT: { status: 'CO_LOI', note: '' },
           baoCaoTinhTrangSuaLoi: '',
           chotThongCong: 'CHUA',
           ngayThongCong: null,
@@ -580,6 +705,10 @@ export class StorageService {
   }
 
   deleteDischargeReport(reportId) {
+    if (!this.canDeleteDischargeReport()) {
+      console.warn('Quyền bị từ chối: Chỉ nhóm Khoa / Bác sĩ điều trị hoặc Admin mới có quyền xóa báo cáo ra viện!');
+      return false;
+    }
     let reports = this.getDischargeReports();
     const initialLen = reports.length;
     reports = reports.filter(r => r.id !== reportId);
@@ -697,7 +826,13 @@ export class StorageService {
   getStaff() {
     try {
       const staffJson = localStorage.getItem(STORAGE_KEYS.STAFF);
-      return staffJson ? JSON.parse(staffJson) : DEFAULT_STAFF;
+      const list = staffJson ? JSON.parse(staffJson) : DEFAULT_STAFF;
+      return list.map(s => {
+        if (s.defaultRole === 'NHOM_1') {
+          return { ...s, defaultRole: 'KETOAN_BH' };
+        }
+        return s;
+      });
     } catch (e) {
       return DEFAULT_STAFF;
     }
@@ -710,14 +845,34 @@ export class StorageService {
   addStaff(staffMember) {
     const staffList = this.getStaff();
     const newId = 'NV' + String(staffList.length + 1).padStart(2, '0');
+    const roleKey = staffMember.defaultRole || 'NHOM_2';
+    
+    // Tự sinh username nếu chưa có
+    let username = staffMember.username ? staffMember.username.trim().toLowerCase() : '';
+    if (!username) {
+      username = 'user_' + newId.toLowerCase();
+    }
+
+    const emojiMap = {
+      ADMIN: '👑',
+      KHTH: '📋',
+      KETOAN_BH: '💵',
+      DUOC: '💊',
+      IT: '💻',
+      NHOM_2: '👨‍⚕️'
+    };
+
     const newStaff = {
       id: newId,
+      username: username,
+      password: staffMember.password || '123',
       name: staffMember.name,
       department: staffMember.department,
       position: staffMember.position || 'Bác sĩ điều trị',
       phone: staffMember.phone || '',
       zaloId: staffMember.zaloId || '',
-      defaultRole: staffMember.defaultRole || 'NHOM_2'
+      defaultRole: roleKey,
+      avatarEmoji: staffMember.avatarEmoji || emojiMap[roleKey] || '👨‍⚕️'
     };
     staffList.push(newStaff);
     this.saveStaff(staffList);
@@ -732,6 +887,13 @@ export class StorageService {
       staffList[index] = { ...staffList[index], ...updates };
       this.saveStaff(staffList);
       supabaseService.upsertStaff(staffList[index]);
+
+      // Đồng bộ tức thời hồ sơ và phân quyền nếu nhân viên này đang đăng nhập
+      const currentUser = this.getCurrentUser();
+      if (currentUser && currentUser.id === id) {
+        const updatedCurrentUser = { ...currentUser, ...updates };
+        this.setCurrentUser(updatedCurrentUser);
+      }
       return true;
     }
     return false;

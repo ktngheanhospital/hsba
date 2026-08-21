@@ -9,7 +9,7 @@
 import { storage } from './storage.js';
 import { notificationService } from './notificationService.js';
 import { MUC_DO_CANH_BAO, TRANG_THAI_KIEM_DUYET, TRANG_THAI_LOI } from './data.js';
-import { showToast, getTodayDateString, getNowDateTimeString, escapeHtml, printRecordSheet, formatDateTimeVN, formatDateVN, getMucDoLoiBadge } from './utils.js';
+import { showToast, getTodayDateString, getNowDateTimeString, escapeHtml, printRecordSheet, formatDateTimeVN, formatDateVN, getMucDoLoiBadge, getDefaultDischargeDateTime, formatDischargeDateTimeVN } from './utils.js';
 
 export class ModalController {
   constructor(app) {
@@ -81,8 +81,8 @@ export class ModalController {
         <div class="modal-header-title">
           <span class="modal-icon-badge">➕</span>
           <div>
-            <h3>Báo cáo lỗi rà soát HSBA mới</h3>
-            <p class="modal-subtitle">Quyền hạn: <strong class="text-primary">${storage.getRoleDetails().name}</strong> | Bắt buộc 8 trường dưới đây</p>
+            <h3>Hồ sơ được rà soát mới</h3>
+            <p class="modal-subtitle">Quyền hạn: <strong class="text-primary">${storage.getRoleDetails().name}</strong> | Nhập thông tin rà soát</p>
           </div>
         </div>
         <button class="btn-close-modal" id="btn-modal-close" title="Đóng">&times;</button>
@@ -149,6 +149,7 @@ export class ModalController {
           <div class="form-group">
             <label class="form-label required">8. Mức độ lỗi:</label>
             <select id="add-mucDoLoi" class="form-select" required>
+              <option value="Không có lỗi">🟢 Không có lỗi</option>
               <option value="Nhắc nhở">🟡 Nhắc nhở</option>
               <option value="Yêu cầu kiểm tra">🟣 Yêu cầu kiểm tra</option>
               <option value="Báo động" selected>🚨 Báo động</option>
@@ -159,8 +160,8 @@ export class ModalController {
 
         <!-- 9. Diễn giải lỗi -->
         <div class="form-group full-width" style="margin-top: 10px;">
-          <label class="form-label required">9. Diễn giải chi tiết lỗi phát hiện:</label>
-          <textarea id="add-dienGiaiLoi" class="form-textarea" rows="3" placeholder="Mô tả cụ thể nội dung lỗi: sai liều thuốc, thiếu ký tên, sai thời gian y lệnh, thiếu kết quả xét nghiệm kèm theo..." required></textarea>
+          <label class="form-label">9. Diễn giải chi tiết lỗi phát hiện (không bắt buộc):</label>
+          <textarea id="add-dienGiaiLoi" class="form-textarea" rows="3" placeholder="Mô tả cụ thể nội dung lỗi: sai liều thuốc, thiếu ký tên, sai thời gian y lệnh, thiếu kết quả xét nghiệm kèm theo..."></textarea>
           <div class="field-error" id="err-dienGiaiLoi"></div>
         </div>
 
@@ -207,7 +208,7 @@ export class ModalController {
       const ngayKiemHoSo = document.getElementById('add-ngayKiemHoSo').value;
       let thoiGianChiDinhYL = document.getElementById('add-thoiGianChiDinhYL').value;
       const mucDoLoi = document.getElementById('add-mucDoLoi').value;
-      const dienGiaiLoi = document.getElementById('add-dienGiaiLoi').value.trim();
+      let dienGiaiLoi = document.getElementById('add-dienGiaiLoi').value.trim();
 
       if (thoiGianChiDinhYL && thoiGianChiDinhYL.includes('T')) {
         thoiGianChiDinhYL = thoiGianChiDinhYL.replace('T', ' ');
@@ -231,10 +232,17 @@ export class ModalController {
       checkRequired(ngayKiemHoSo, 'err-ngayKiemHoSo', 'Vui lòng chọn Ngày kiểm hồ sơ!');
       checkRequired(thoiGianChiDinhYL, 'err-thoiGianChiDinhYL', 'Vui lòng nhập Thời gian YL!');
       checkRequired(mucDoLoi, 'err-mucDoLoi', 'Vui lòng chọn Mức độ lỗi!');
-      checkRequired(dienGiaiLoi, 'err-dienGiaiLoi', 'Vui lòng nhập Diễn giải lỗi!');
+      
+      if (!dienGiaiLoi) {
+        if (mucDoLoi === 'Không có lỗi') {
+          dienGiaiLoi = 'Hồ sơ đạt yêu cầu, không phát hiện sai sót';
+        } else {
+          dienGiaiLoi = '';
+        }
+      }
 
       if (hasError) {
-        showToast('Vui lòng điền đủ 8 trường thông tin bắt buộc!', 'error');
+        showToast('Vui lòng điền đủ các trường thông tin bắt buộc!', 'error');
         return;
       }
 
@@ -250,7 +258,7 @@ export class ModalController {
         mucDoCanhBao: mucDoLoi,
         dienGiaiLoi,
         trangThaiKiemDuyet: mucDoLoi,
-        trangThaiLoi: 'CHƯA SỬA',
+        trangThaiLoi: mucDoLoi === 'Không có lỗi' ? 'ĐÃ XONG' : 'CHƯA SỬA',
         yKienNguoiSua: '',
         pushSentCount: 0,
         lastPushSentAt: null,
@@ -300,18 +308,16 @@ export class ModalController {
     let permissionNotice = '';
     if (currentRole === 'ADMIN') {
       permissionNotice = `<div class="role-alert-banner alert-admin">👑 <strong>Quản trị viên:</strong> Bạn có toàn quyền chỉnh sửa cả Thông tin rà soát và Tiến độ khắc phục lỗi.</div>`;
-    } else if (currentRole === 'KETOAN_BH') {
-      permissionNotice = `<div class="role-alert-banner alert-ketoan">💵 <strong>Kế toán Bảo hiểm (Kế toán BHYT):</strong> Phụ trách phân công rà soát thông tin lỗi, ấn định <strong>Mức độ lỗi</strong> (Nhắc nhở, Yêu cầu kiểm tra, Báo động).</div>`;
+    } else if (currentRole === 'KETOAN_BH' || currentRole === 'NHOM_1') {
+      permissionNotice = `<div class="role-alert-banner alert-ketoan">💵 <strong>Nhóm KTBH (Tổ Rà Soát & Kế toán BHYT):</strong> Phụ trách rà soát phát hiện lỗi, ấn định <strong>Mức độ lỗi</strong> (Nhắc nhở, Yêu cầu kiểm tra, Báo động).</div>`;
     } else if (currentRole === 'KHTH') {
       permissionNotice = `<div class="role-alert-banner alert-khth">📋 <strong>Kế hoạch Tổng hợp (KHTH):</strong> Được phép kiểm duyệt hồ sơ rà soát lỗi và có <strong>Quyền Chốt Thông Cổng</strong> ra viện.</div>`;
     } else if (currentRole === 'DUOC') {
       permissionNotice = `<div class="role-alert-banner alert-duoc">💊 <strong>Khoa Dược:</strong> Được phép rà soát lỗi liên quan đến thuốc & kháng sinh.</div>`;
     } else if (currentRole === 'IT') {
       permissionNotice = `<div class="role-alert-banner alert-it">💻 <strong>Phòng CNTT (IT):</strong> Kiểm tra dữ liệu HIS, chuẩn hóa XML đồng bộ cổng BHXH.</div>`;
-    } else if (currentRole === 'NHOM_1') {
-      permissionNotice = `<div class="role-alert-banner alert-nhom1">🔍 <strong>Nhóm 1 (Tổ Rà Soát HSBA):</strong> Được phép chỉnh sửa thông tin rà soát và Mức độ lỗi.</div>`;
     } else {
-      permissionNotice = `<div class="role-alert-banner alert-nhom2">👨‍⚕️ <strong>Khoa / Người sửa hồ sơ:</strong> Cập nhật Tiến độ sửa lỗi và Ý kiến giải trình khắc phục. (Mức độ lỗi do Kế toán BHYT / Bộ phận rà soát ấn định).</div>`;
+      permissionNotice = `<div class="role-alert-banner alert-nhom2">👨‍⚕️ <strong>Khoa / Người sửa hồ sơ:</strong> Cập nhật Tiến độ sửa lỗi và Ý kiến giải trình khắc phục. (Mức độ lỗi do Nhóm KTBH ấn định).</div>`;
     }
 
     const html = `
@@ -329,11 +335,11 @@ export class ModalController {
       <form id="form-edit-error" class="modal-form">
         ${permissionNotice}
 
-        <!-- PHẦN 1: THÔNG TIN RÀ SOÁT LỖI (QUYỀN KẾ TOÁN BHYT / TỔ RÀ SOÁT / KHTH / ADMIN) -->
+        <!-- PHẦN 1: THÔNG TIN RÀ SOÁT LỖI (QUYỀN NHÓM KTBH / KHTH / ADMIN) -->
         <div class="permission-section-box ${canEditGroup1 ? 'sec-editable' : 'sec-readonly'}">
           <div class="sec-title-bar">
-            <span class="sec-title">📌 THÔNG TIN RÀ SOÁT LỖI (Phân công Kế toán BHYT / Bộ phận rà soát)</span>
-            ${canEditGroup1 ? '<span class="badge-perm-allow">✓ Bạn được phép sửa</span>' : '<span class="badge-perm-lock">🔒 Khóa (Chỉ Kế toán BHYT / Tổ Rà Soát / KHTH sửa)</span>'}
+            <span class="sec-title">📌 THÔNG TIN RÀ SOÁT LỖI (Nhóm KTBH / Chuyên môn rà soát)</span>
+            ${canEditGroup1 ? '<span class="badge-perm-allow">✓ Bạn được phép sửa</span>' : '<span class="badge-perm-lock">🔒 Khóa (Chỉ Nhóm KTBH / KHTH sửa)</span>'}
           </div>
 
           <div class="form-grid">
@@ -391,6 +397,7 @@ export class ModalController {
               <label class="form-label required font-bold text-primary">Mức độ lỗi:</label>
               ${canEditGroup1 ? `
                 <select id="edit-mucDoLoi" class="form-select highlight-select" required>
+                  <option value="Không có lỗi" ${(record.mucDoLoi || record.mucDoCanhBao) === 'Không có lỗi' ? 'selected' : ''}>🟢 Không có lỗi</option>
                   <option value="Nhắc nhở" ${(record.mucDoLoi || record.mucDoCanhBao) === 'Nhắc nhở' ? 'selected' : ''}>🟡 Nhắc nhở</option>
                   <option value="Yêu cầu kiểm tra" ${(record.mucDoLoi || record.mucDoCanhBao) === 'Yêu cầu kiểm tra' || record.mucDoCanhBao === 'Cao (Nghiêm trọng)' ? 'selected' : ''}>🟣 Yêu cầu kiểm tra</option>
                   <option value="Báo động" ${(record.mucDoLoi || record.mucDoCanhBao) === 'Báo động' || record.mucDoCanhBao === 'Khẩn cấp' ? 'selected' : ''}>🚨 Báo động</option>
@@ -403,8 +410,8 @@ export class ModalController {
           </div>
 
           <div class="form-group full-width" style="margin-top: 10px;">
-            <label class="form-label required">Diễn giải lỗi phát hiện:</label>
-            <textarea id="edit-dienGiaiLoi" class="form-textarea" rows="3" ${!canEditGroup1 ? 'readonly' : 'required'}>${escapeHtml(record.dienGiaiLoi)}</textarea>
+            <label class="form-label">Diễn giải lỗi phát hiện (không bắt buộc):</label>
+            <textarea id="edit-dienGiaiLoi" class="form-textarea" rows="3" ${!canEditGroup1 ? 'readonly' : ''}>${escapeHtml(record.dienGiaiLoi || '')}</textarea>
           </div>
         </div>
 
@@ -529,6 +536,7 @@ export class ModalController {
     const departments = storage.getDepartments();
     const staffList = storage.getStaff();
     const today = getTodayDateString();
+    const defaultDischargeDateTime = getDefaultDischargeDateTime(today);
     const activeDept = storage.getActiveDepartment();
 
     const deptOptions = departments.map(d => `<option value="${escapeHtml(d.name)}" ${d.name === activeDept ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('');
@@ -554,39 +562,46 @@ export class ModalController {
             <input type="date" id="rep-ngayBaoCao" class="form-input" value="${today}" required />
           </div>
 
-          <!-- 2. Mã KCB -->
+          <!-- 2. Ngày ra viện -->
           <div class="form-group">
-            <label class="form-label required">2. Mã KCB (Mã Bệnh án):</label>
+            <label class="form-label required">2. Ngày ra viện:</label>
+            <input type="datetime-local" id="rep-ngayRaVien" class="form-input font-bold" value="${defaultDischargeDateTime}" required />
+            <small class="form-help text-xs text-muted">Mặc định: 8h30 ngày N+1 (ngày sau báo cáo)</small>
+          </div>
+
+          <!-- 3. Mã KCB -->
+          <div class="form-group">
+            <label class="form-label required">3. Mã KCB (Mã Bệnh án):</label>
             <input type="text" id="rep-maKCB" class="form-input font-makcb" placeholder="Ví dụ: BN-2026-08412" required autofocus />
           </div>
 
-          <!-- 3. Tên BN -->
+          <!-- 4. Tên BN -->
           <div class="form-group">
-            <label class="form-label required">3. Tên Bệnh nhân:</label>
+            <label class="form-label required">4. Tên Bệnh nhân:</label>
             <input type="text" id="rep-tenBenhNhan" class="form-input font-patient" placeholder="Ví dụ: Hoàng Thị Lan" required />
           </div>
 
-          <!-- 4. Khoa/Phòng -->
+          <!-- 5. Khoa/Phòng -->
           <div class="form-group">
-            <label class="form-label required">4. Khoa / Phòng điều trị:</label>
+            <label class="form-label required">5. Khoa / Phòng điều trị:</label>
             <select id="rep-phong" class="form-select" required>
               <option value="">-- Chọn Khoa/Phòng --</option>
               ${deptOptions}
             </select>
           </div>
 
-          <!-- 5. Bác sĩ điều trị -->
+          <!-- 6. Bác sĩ điều trị -->
           <div class="form-group">
-            <label class="form-label required">5. Bác sĩ điều trị:</label>
+            <label class="form-label required">6. Bác sĩ điều trị:</label>
             <input type="text" id="rep-tenBacSi" list="dl-rep-staff" class="form-input" placeholder="Gõ tên hoặc chọn bác sĩ..." autocomplete="off" required />
             <datalist id="dl-rep-staff">
               ${doctorOptions}
             </datalist>
           </div>
 
-          <!-- 6. Người báo cáo -->
-          <div class="form-group">
-            <label class="form-label">6. Người báo cáo:</label>
+          <!-- 7. Người báo cáo -->
+          <div class="form-group full-width">
+            <label class="form-label">7. Người báo cáo:</label>
             <input type="text" id="rep-nguoiBaoCao" class="form-input" value="${escapeHtml(storage.getCurrentUser() ? storage.getCurrentUser().name : '')}" />
           </div>
         </div>
@@ -608,6 +623,15 @@ export class ModalController {
     document.getElementById('btn-modal-close').onclick = () => this.closeModal();
     document.getElementById('btn-cancel-rep').onclick = () => this.closeModal();
 
+    // Tự động cập nhật Ngày ra viện khi thay đổi Ngày báo cáo
+    const reportDateInput = document.getElementById('rep-ngayBaoCao');
+    const dischargeDateTimeInput = document.getElementById('rep-ngayRaVien');
+    if (reportDateInput && dischargeDateTimeInput) {
+      reportDateInput.onchange = (e) => {
+        dischargeDateTimeInput.value = getDefaultDischargeDateTime(e.target.value);
+      };
+    }
+
     // Tự động điền Khoa khi chọn Bác sĩ
     const doctorInput = document.getElementById('rep-tenBacSi');
     const deptSelect = document.getElementById('rep-phong');
@@ -624,6 +648,7 @@ export class ModalController {
 
     const saveDischargeHandler = (keepOpen = false) => {
       const ngayBaoCao = document.getElementById('rep-ngayBaoCao').value;
+      const ngayRaVien = document.getElementById('rep-ngayRaVien') ? document.getElementById('rep-ngayRaVien').value : getDefaultDischargeDateTime(ngayBaoCao);
       const maKCB = document.getElementById('rep-maKCB').value.trim();
       const tenBenhNhan = document.getElementById('rep-tenBenhNhan').value.trim();
       const phong = document.getElementById('rep-phong').value.trim();
@@ -637,6 +662,7 @@ export class ModalController {
 
       storage.addDischargeReport({
         ngayBaoCao,
+        ngayRaVien,
         maKCB,
         tenBenhNhan,
         phong,
@@ -685,9 +711,8 @@ export class ModalController {
   // =========================================================================
   // 4. MODAL KIỂM LỖI NHANH TRỰC TIẾP TỪNG KHÂU (PHÂN QUYỀN CHẶT CHẼ)
   // - Khâu Dược: Chỉ Khoa Dược & Admin
-  // - Khâu Kế toán BH: Chỉ Kế toán BHYT & Admin
+  // - Khâu Kế toán BH: Chỉ Kế toán BHYT & Admin (Tự động theo Rà soát lỗi)
   // - Khâu KHTH: Chỉ Kế hoạch Tổng hợp & Admin
-  // - Khâu IT: Chỉ Phòng CNTT & Admin
   // =========================================================================
   openQuickStepCheckModal(reportId, stepKey) {
     const report = storage.getDischargeReports().find(r => r.id === reportId);
@@ -703,8 +728,7 @@ export class ModalController {
     const stepMeta = {
       duoc: { key: 'kiemDuoc', label: 'Dược', title: 'Khâu Dược (Thuốc, VTYT, Kháng sinh)', deptName: 'Khoa Dược', icon: '💊' },
       ketoan: { key: 'kiemKeToanBH', label: 'Kế toán bảo hiểm', title: 'Khâu Kế toán Bảo hiểm (Mức hưởng, Viện phí, BHYT)', deptName: 'Kế toán BHYT', icon: '💵' },
-      khth: { key: 'kiemKHTH', label: 'Kế hoạch tổng hợp', title: 'Khâu Kế hoạch Tổng hợp (Hồ sơ, Chữ ký, Biên bản)', deptName: 'Phòng KHTH', icon: '📋' },
-      it: { key: 'kiemIT', label: 'IT', title: 'Khâu IT (Dữ liệu HIS, Đồng bộ XML)', deptName: 'Phòng CNTT', icon: '💻' }
+      khth: { key: 'kiemKHTH', label: 'Kế hoạch tổng hợp', title: 'Khâu Kế hoạch Tổng hợp (Hồ sơ, Chữ ký, Biên bản)', deptName: 'Phòng KHTH', icon: '📋' }
     };
 
     const currentStep = stepMeta[stepKey] || stepMeta.duoc;
@@ -807,7 +831,7 @@ export class ModalController {
 
     const currentRole = storage.getCurrentRole();
     const canChotThongCong = storage.canChotThongCong();
-    const canDelete = storage.canDeleteRecord();
+    const canDelete = storage.canDeleteDischargeReport();
 
     const renderCheckStep = (key, label, icon, deptName, checkData) => {
       const isError = checkData.status === 'CO_LOI';
@@ -849,7 +873,7 @@ export class ModalController {
         <div class="modal-header-title">
           <span class="modal-icon-badge">🔒</span>
           <div>
-            <h3>Kiểm Lỗi 4 Khâu & Chốt Thông Cổng</h3>
+            <h3>Kiểm Lỗi Chuyên Môn & Chốt Thông Cổng</h3>
             <p class="modal-subtitle">BN: <strong>${escapeHtml(report.tenBenhNhan)}</strong> (Mã: <strong>${escapeHtml(report.maKCB)}</strong>) - Khoa: <strong>${escapeHtml(report.phong)}</strong></p>
           </div>
         </div>
@@ -859,12 +883,12 @@ export class ModalController {
       <form id="form-edit-discharge-report" class="modal-form">
         <!-- Thông tin cơ bản -->
         <div class="quick-info-pill">
-          <div>📅 Ngày báo cáo: <strong>${formatDateVN(report.ngayBaoCao)}</strong> | 👨‍⚕️ Bác sĩ: <strong>${escapeHtml(report.tenBacSi)}</strong> | 🏥 Phòng/Khoa: <strong>${escapeHtml(report.phong)}</strong></div>
+          <div>⏰ Ngày ra viện: <strong>${formatDischargeDateTimeVN(report.ngayRaVien || report.ngayBaoCao)}</strong> | 📅 Ngày BC: <strong>${formatDateVN(report.ngayBaoCao)}</strong> | 👨‍⚕️ Bác sĩ: <strong>${escapeHtml(report.tenBacSi)}</strong> | 🏥 Khoa: <strong>${escapeHtml(report.phong)}</strong></div>
         </div>
 
-        <!-- 4 Khâu Kiểm Lỗi -->
+        <!-- 3 Khâu Kiểm Lỗi -->
         <div style="margin: 14px 0 6px 0;">
-          <label class="form-label font-bold text-primary">🔍 KẾT QUẢ KIỂM LỖI 4 KHÂU CHUYÊN MÔN (PHÂN QUYỀN TỪNG BỘ PHẬN):</label>
+          <label class="form-label font-bold text-primary">🔍 KẾT QUẢ KIỂM LỖI CÁC KHÂU CHUYÊN MÔN (PHÂN QUYỀN TỪNG BỘ PHẬN):</label>
         </div>
 
         <div class="check-steps-container">
@@ -876,9 +900,6 @@ export class ModalController {
 
           <!-- 3. Kế hoạch tổng hợp -->
           ${renderCheckStep('khth', 'Kế hoạch tổng hợp (Hồ sơ, Ký tên, Biên bản)', '📋', 'Phòng KHTH', report.kiemKHTH || { status: 'CO_LOI', note: '' })}
-
-          <!-- 4. IT -->
-          ${renderCheckStep('it', 'IT (Dữ liệu HIS, Đồng bộ XML)', '💻', 'Phòng CNTT', report.kiemIT || { status: 'CO_LOI', note: '' })}
         </div>
 
         <!-- Báo cáo tình trạng sửa lỗi -->
@@ -979,7 +1000,6 @@ export class ModalController {
         kiemDuoc: getStepData('duoc', report.kiemDuoc || { status: 'CO_LOI', note: '' }),
         kiemKeToanBH: getStepData('ketoan', report.kiemKeToanBH || { status: 'CO_LOI', note: '' }),
         kiemKHTH: getStepData('khth', report.kiemKHTH || { status: 'CO_LOI', note: '' }),
-        kiemIT: getStepData('it', report.kiemIT || { status: 'CO_LOI', note: '' }),
         baoCaoTinhTrangSuaLoi: document.getElementById('edit-baoCaoTinhTrangSuaLoi').value.trim()
       };
 
@@ -1245,6 +1265,16 @@ export class ModalController {
         </div>
         <div class="form-grid" style="margin-top: 10px;">
           <div class="form-group">
+            <label class="form-label required">Tên đăng nhập (Username):</label>
+            <input type="text" id="staff-username" class="form-input font-mono" value="${escapeHtml(staffMember ? (staffMember.username || '') : '')}" placeholder="vd: duoc, bsy_lan, rasoat..." required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Mật khẩu:</label>
+            <input type="text" id="staff-password" class="form-input font-mono" value="${escapeHtml(staffMember ? (staffMember.password || '123') : '123')}" placeholder="123" />
+          </div>
+        </div>
+        <div class="form-grid" style="margin-top: 10px;">
+          <div class="form-group">
             <label class="form-label">Số điện thoại liên hệ:</label>
             <input type="tel" id="staff-phone" class="form-input" value="${escapeHtml(staffMember ? (staffMember.phone || '') : '')}" placeholder="0901234567" />
           </div>
@@ -1254,16 +1284,18 @@ export class ModalController {
           </div>
         </div>
         <div class="form-group" style="margin-top: 10px;">
-          <label class="form-label font-bold text-primary">Nhóm vai trò chuyên môn:</label>
+          <label class="form-label font-bold text-primary">Vai trò mặc định (Áp dụng phân quyền):</label>
           <select id="staff-role" class="form-select highlight-select">
-            <option value="DUOC" ${staffMember && staffMember.defaultRole === 'DUOC' ? 'selected' : ''}>💊 Khoa Dược (Duyệt khâu Dược)</option>
-            <option value="KETOAN_BH" ${staffMember && staffMember.defaultRole === 'KETOAN_BH' ? 'selected' : ''}>💵 Kế toán Bảo hiểm (Duyệt khâu KT-BH)</option>
-            <option value="KHTH" ${staffMember && staffMember.defaultRole === 'KHTH' ? 'selected' : ''}>📋 Kế hoạch Tổng hợp (Duyệt KHTH & Chốt cổng)</option>
-            <option value="IT" ${staffMember && staffMember.defaultRole === 'IT' ? 'selected' : ''}>💻 Phòng CNTT (Duyệt khâu IT)</option>
-            <option value="NHOM_2" ${staffMember && staffMember.defaultRole === 'NHOM_2' ? 'selected' : ''}>👨‍⚕️ Khoa / Bác sĩ Điều Trị (Báo cáo ra viện)</option>
-            <option value="NHOM_1" ${staffMember && staffMember.defaultRole === 'NHOM_1' ? 'selected' : ''}>🔍 Nhóm 1: Tổ Rà Soát HSBA</option>
+            <option value="DUOC" ${staffMember && staffMember.defaultRole === 'DUOC' ? 'selected' : ''}>💊 Khoa Dược (Dược sĩ lâm sàng)</option>
+            <option value="KETOAN_BH" ${staffMember && (staffMember.defaultRole === 'KETOAN_BH' || staffMember.defaultRole === 'NHOM_1') ? 'selected' : ''}>💵 Nhóm KTBH (Tổ Rà Soát & Kế Toán BHYT)</option>
+            <option value="KHTH" ${staffMember && staffMember.defaultRole === 'KHTH' ? 'selected' : ''}>📋 Kế hoạch Tổng hợp (KHTH)</option>
+            <option value="IT" ${staffMember && staffMember.defaultRole === 'IT' ? 'selected' : ''}>💻 Phòng Công nghệ Thông tin (IT)</option>
+            <option value="NHOM_2" ${staffMember && staffMember.defaultRole === 'NHOM_2' ? 'selected' : ''}>👨‍⚕️ Khoa / Bác sĩ Điều Trị</option>
             <option value="ADMIN" ${staffMember && staffMember.defaultRole === 'ADMIN' ? 'selected' : ''}>👑 Quản trị viên (Toàn quyền)</option>
           </select>
+          <span class="text-caption text-muted" style="margin-top: 4px; display: block;">
+            Phân quyền thao tác của nhân viên trên các cột và tính năng sẽ tự động áp dụng theo Vai trò mặc định này.
+          </span>
         </div>
         <div class="modal-footer" style="margin-top: 16px;">
           <button type="button" class="btn btn-secondary" id="btn-staff-cancel">Hủy</button>
@@ -1282,14 +1314,16 @@ export class ModalController {
       const name = document.getElementById('staff-name').value.trim();
       const department = document.getElementById('staff-dept').value.trim();
       const position = document.getElementById('staff-position').value.trim();
+      const username = document.getElementById('staff-username').value.trim().toLowerCase();
+      const password = document.getElementById('staff-password').value.trim() || '123';
       const phone = document.getElementById('staff-phone').value.trim();
       const zaloId = document.getElementById('staff-zalo-id').value.trim();
       const defaultRole = document.getElementById('staff-role').value;
 
       if (isEdit) {
-        storage.updateStaff(staffMember.id, { name, department, position, phone, zaloId, defaultRole });
+        storage.updateStaff(staffMember.id, { name, department, position, username, password, phone, zaloId, defaultRole });
       } else {
-        storage.addStaff({ name, department, position, phone, zaloId, defaultRole });
+        storage.addStaff({ name, department, position, username, password, phone, zaloId, defaultRole });
       }
       showToast(`Đã lưu nhân viên: ${name}`, 'success');
       this.closeModal();

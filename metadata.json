@@ -1,6 +1,6 @@
 {
-  "name": "Theo dõi HSBA BV HNĐK Nghệ An",
-  "description": "Hệ thống rà soát hồ sơ bệnh án, báo cáo và chốt ra viện 4 khâu chuyên môn kèm hệ thống thông báo đẩy (Push Notification) tức thời - BV Hữu Nghị Đa Khoa Nghệ An - Giai đoạn 2.",
+  "name": "Remix hsba",
+  "description": "Hệ thống theo dõi rà soát hồ sơ bệnh án, báo cáo chốt ra viện các khâu chuyên môn, kiểm soát lỗi điều kiện 1 & 2 và thống kê người phạm lỗi - BV Hữu Nghị Đa Khoa Nghệ An",
   "requestFramePermissions": [
     "notifications"
   ],
