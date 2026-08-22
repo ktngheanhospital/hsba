@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGradMask" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F766E"/>
+      <stop offset="100%" stop-color="#115E59"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Full bleed background for maskable icon -->
+  <rect width="512" height="512" fill="url(#bgGradMask)"/>
+  
+  <!-- Medical Cross within Safe Zone (middle 80%) -->
+  <circle cx="256" cy="256" r="140" fill="#FFFFFF" fill-opacity="0.15"/>
+  <path d="M 224 140 L 288 140 A 12 12 0 0 1 300 152 L 300 224 L 372 224 A 12 12 0 0 1 384 236 L 384 276 A 12 12 0 0 1 372 288 L 300 288 L 300 360 A 12 12 0 0 1 288 372 L 224 372 A 12 12 0 0 1 212 360 L 212 288 L 140 288 A 12 12 0 0 1 128 276 L 128 236 A 12 12 0 0 1 140 224 L 212 224 L 212 152 A 12 12 0 0 1 224 140 Z" 
+        fill="#FFFFFF" />
+  <path d="M 240 180 L 272 180 A 6 6 0 0 1 278 186 L 278 240 L 332 240 A 6 6 0 0 1 338 246 L 338 266 A 6 6 0 0 1 332 272 L 278 272 L 278 326 A 6 6 0 0 1 272 332 L 240 332 A 6 6 0 0 1 234 326 L 234 272 L 180 272 A 6 6 0 0 1 174 266 L 174 246 A 6 6 0 0 1 180 240 L 234 240 L 234 186 A 6 6 0 0 1 240 180 Z" 
+        fill="#0F766E" />
+</svg>

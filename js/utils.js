@@ -430,12 +430,38 @@ export function matchesTimePeriod(dateStr, timeFilter) {
 }
 
 // ==========================================================================
-// TÍNH TOÁN SỐ LIỆU TỔNG QUAN DASHBOARD (ĐIỀU KIỆN 1 & ĐIỀU KIỆN 2 CÓ LỌC THỜI GIAN)
+// TÍNH TOÁN SỐ LIỆU TỔNG QUAN DASHBOARD (ĐIỀU KIỆN 1 & ĐIỀU KIỆN 2 CÓ LỌC THỜI GIAN VÀ CÁ NHÂN NGƯỜI DÙNG)
 // ==========================================================================
-export function computeDashboardStats(allRecords, allDischargeReports, departments, timeFilter = { type: 'DAY', value: getTodayDateString() }) {
-  // Lọc dữ liệu theo thời gian đã chọn
-  const dischargeReports = (allDischargeReports || []).filter(d => matchesTimePeriod(extractDateString(d), timeFilter));
-  const records = (allRecords || []).filter(r => matchesTimePeriod(extractDateString(r), timeFilter));
+export function computeDashboardStats(allRecords, allDischargeReports, departments, timeFilter = { type: 'DAY', value: getTodayDateString() }, userFilter = null) {
+  // 1. Lọc dữ liệu theo thời gian đã chọn
+  let dischargeReports = (allDischargeReports || []).filter(d => matchesTimePeriod(extractDateString(d), timeFilter));
+  let records = (allRecords || []).filter(r => matchesTimePeriod(extractDateString(r), timeFilter));
+
+  // 2. Lọc theo chính người dùng đăng nhập (nếu có yêu cầu lọc cá nhân)
+  let isPersonal = false;
+  let personalName = '';
+  if (userFilter && userFilter.name) {
+    isPersonal = true;
+    personalName = userFilter.name;
+    const uNameClean = removeVietnameseTones(userFilter.name || '').trim().toLowerCase();
+    const uDeptClean = removeVietnameseTones(userFilter.department || '').trim().toLowerCase();
+
+    records = records.filter(r => {
+      const bsClean = removeVietnameseTones(r.nguoiChiDinh || '').trim().toLowerCase();
+      const kpClean = removeVietnameseTones(r.khoaPhong || '').trim().toLowerCase();
+      const matchDoc = bsClean && (bsClean.includes(uNameClean) || uNameClean.includes(bsClean));
+      const matchDept = uDeptClean && kpClean === uDeptClean;
+      return matchDoc || matchDept;
+    });
+
+    dischargeReports = dischargeReports.filter(d => {
+      const bsClean = removeVietnameseTones(d.tenBacSi || '').trim().toLowerCase();
+      const kpClean = removeVietnameseTones(d.phong || '').trim().toLowerCase();
+      const matchDoc = bsClean && (bsClean.includes(uNameClean) || uNameClean.includes(bsClean));
+      const matchDept = uDeptClean && kpClean === uDeptClean;
+      return matchDoc || matchDept;
+    });
+  }
 
   // 1. Tạo Map hồ sơ ra viện theo maKCB chuẩn hóa
   const dischargeMap = new Map();
@@ -585,6 +611,8 @@ export function computeDashboardStats(allRecords, allDischargeReports, departmen
 
   return {
     timeFilter,
+    isPersonal,
+    personalName,
     totalDischarge: dischargeReports.length,
     passedDischarge: dischargeReports.filter(d => d.chotThongCong === 'CO').length,
     pendingDischarge: dischargeReports.filter(d => d.chotThongCong !== 'CO').length,

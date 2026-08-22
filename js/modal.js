@@ -168,7 +168,7 @@ export class ModalController {
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-add">Hủy bỏ</button>
           <button type="submit" class="btn btn-primary" id="btn-submit-add">
-            <span>💾 Lưu & Bắn Thông Báo Đẩy</span>
+            <span>💾 Lưu hồ sơ rà soát</span>
           </button>
         </div>
       </form>
@@ -428,7 +428,7 @@ export class ModalController {
               <select id="edit-trangThaiLoi" class="form-select highlight-select" required>
                 <option value="CHƯA SỬA" ${record.trangThaiLoi === 'CHƯA SỬA' ? 'selected' : ''}>🔴 CHƯA SỬA</option>
                 <option value="ĐÃ XEM - ĐANG SỬA" ${record.trangThaiLoi === 'ĐÃ XEM - ĐANG SỬA' ? 'selected' : ''}>🟠 ĐÃ XEM - ĐANG SỬA</option>
-                <option value="ĐÃ XONG" ${record.trangThaiLoi === 'ĐÃ XONG' ? 'selected' : ''}>🟢 ĐÃ XONG (Dừng gửi tin Zalo)</option>
+                <option value="ĐÃ XONG" ${record.trangThaiLoi === 'ĐÃ XONG' ? 'selected' : ''}>🟢 ĐÃ XONG (Hoàn thành sửa lỗi)</option>
                 <option value="HỦY CHUYỂN VIỆN" ${record.trangThaiLoi === 'HỦY CHUYỂN VIỆN' ? 'selected' : ''}>⚪ HỦY CHUYỂN VIỆN</option>
                 <option value="KHÁC" ${record.trangThaiLoi === 'KHÁC' ? 'selected' : ''}>⚙️ KHÁC</option>
               </select>
@@ -445,18 +445,18 @@ export class ModalController {
 
         <div class="modal-footer modal-footer-space-between">
           <div class="footer-actions-left">
+            <button type="button" class="btn btn-outline" id="btn-print-record" title="In phiếu nhắc nhở / biên bản rà soát">
+              <span>🖨️ In phiếu nhắc lỗi</span>
+            </button>
             ${canDelete ? `
-              <button type="button" class="btn btn-danger-outline" id="btn-delete-record">
+              <button type="button" class="btn btn-danger-outline" id="btn-delete-record" title="Xóa hồ sơ rà soát">
                 <span>🗑️ Xóa bản ghi</span>
               </button>
             ` : ''}
-            <button type="button" class="btn btn-outline" id="btn-print-record">
-              <span>🖨️ In phiếu</span>
-            </button>
           </div>
           <div class="footer-actions-right">
             <button type="button" class="btn btn-secondary" id="btn-cancel-edit">Đóng</button>
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" class="btn btn-primary" id="btn-save-edit">
               <span>💾 Lưu thay đổi</span>
             </button>
           </div>
@@ -1356,5 +1356,167 @@ export class ModalController {
       this.closeModal();
       if (typeof onConfirm === 'function') onConfirm();
     };
+  }
+
+  // Hộp thoại Hướng dẫn Cài đặt App PWA chi tiết trên Điện thoại & Máy tính
+  openPWAInstallGuideModal() {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    const canPromptDirectly = !!(window.hsbaApp && window.hsbaApp.deferredInstallPrompt);
+
+    const html = `
+      <div class="modal-header">
+        <div class="modal-header-title">
+          <span class="modal-icon-badge badge-primary">📲</span>
+          <div>
+            <h3>Cài Đặt App "Theo Dõi HSBA" Trên Điện Thoại</h3>
+            <span class="modal-subtitle">Trải nghiệm toàn màn hình mượt mà, tiện lợi và nhận cảnh báo y tế tức thời</span>
+          </div>
+        </div>
+        <button class="btn-close-modal" id="btn-modal-close">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        ${isStandalone ? `
+          <div class="alert-box alert-success" style="margin-bottom: 16px; padding: 12px 16px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;">
+            <strong style="color: #166534; display: block; font-size: 0.95rem;">✅ Bạn đang mở ứng dụng dưới dạng App (PWA)!</strong>
+            <span style="color: #15803d; font-size: 0.82rem;">Ứng dụng đã được cài đặt hoàn tất và đang hoạt động ở chế độ toàn màn hình.</span>
+          </div>
+        ` : ''}
+
+        <!-- OS Toggle Segmented Pills -->
+        <div class="pwa-modal-os-tabs">
+          <button type="button" class="pwa-os-tab-btn ${isIOS ? 'active' : ''}" id="tab-btn-ios" data-os="ios">
+            <span>🍎 iPhone / iPad (iOS)</span>
+          </button>
+          <button type="button" class="pwa-os-tab-btn ${!isIOS ? 'active' : ''}" id="tab-btn-android" data-os="android">
+            <span>🤖 Android & Máy tính</span>
+          </button>
+        </div>
+
+        <!-- Tab 1: iOS Instructions -->
+        <div id="pwa-pane-ios" class="pwa-modal-pane" style="display: ${isIOS ? 'block' : 'none'};">
+          <div class="pwa-guide-steps-list">
+            <div class="pwa-step-card">
+              <div class="pwa-step-number">1</div>
+              <div class="pwa-step-content">
+                <strong>Mở bằng trình duyệt Safari</strong>
+                <p>Đảm bảo bạn đang mở liên kết này bằng trình duyệt <strong>Safari</strong> mặc định trên iPhone / iPad.</p>
+              </div>
+            </div>
+
+            <div class="pwa-step-card highlight-step">
+              <div class="pwa-step-number">2</div>
+              <div class="pwa-step-content">
+                <strong>Bấm nút Chia sẻ (Share) <span class="share-icon-badge">📤</span></strong>
+                <p>Nằm ở thanh công cụ <strong>dưới cùng</strong> màn hình iPhone (hoặc ở góc trên bên phải trên iPad).</p>
+              </div>
+            </div>
+
+            <div class="pwa-step-card highlight-step">
+              <div class="pwa-step-number">3</div>
+              <div class="pwa-step-content">
+                <strong>Chọn "Thêm vào MH chính" <span class="add-icon-badge">➕</span></strong>
+                <p>Cuộn xuống trong menu chia sẻ và chọn dòng chữ <strong>"Thêm vào MH chính"</strong> (hoặc <em>"Add to Home Screen"</em>).</p>
+              </div>
+            </div>
+
+            <div class="pwa-step-card">
+              <div class="pwa-step-number">4</div>
+              <div class="pwa-step-content">
+                <strong>Nhấn "Thêm" (Add) ở góc trên bên phải</strong>
+                <p>Biểu tượng logo 🏥 <strong>Theo dõi HSBA</strong> sẽ xuất hiện trên màn hình chính của bạn như một ứng dụng độc lập.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Android & Desktop Instructions -->
+        <div id="pwa-pane-android" class="pwa-modal-pane" style="display: ${!isIOS ? 'block' : 'none'};">
+          ${canPromptDirectly ? `
+            <div class="pwa-direct-install-box" style="text-align: center; padding: 18px 14px; background: #f0fdfa; border: 1.5px solid #99f6e4; border-radius: 10px; margin-bottom: 16px;">
+              <p style="font-size: 0.92rem; color: #115e59; font-weight: 600; margin-bottom: 12px;">Thiết bị của bạn đã sẵn sàng cài đặt chỉ với 1 chạm:</p>
+              <button type="button" class="btn btn-primary btn-lg" id="btn-modal-direct-install" style="padding: 10px 24px; font-size: 1rem;">
+                <span>📲 Cài Đặt Ngay Vào Máy</span>
+              </button>
+            </div>
+          ` : ''}
+
+          <div class="pwa-guide-steps-list">
+            <div class="pwa-step-card">
+              <div class="pwa-step-number">1</div>
+              <div class="pwa-step-content">
+                <strong>Mở bằng Chrome, Edge hoặc Cốc Cốc</strong>
+                <p>Truy cập hệ thống trên trình duyệt Google Chrome hoặc Microsoft Edge.</p>
+              </div>
+            </div>
+
+            <div class="pwa-step-card highlight-step">
+              <div class="pwa-step-number">2</div>
+              <div class="pwa-step-content">
+                <strong>Bấm vào Menu 3 chấm (⋮)</strong>
+                <p>Nằm ở <strong>góc trên bên phải</strong> màn hình trình duyệt của bạn.</p>
+              </div>
+            </div>
+
+            <div class="pwa-step-card highlight-step">
+              <div class="pwa-step-number">3</div>
+              <div class="pwa-step-content">
+                <strong>Chọn "Cài đặt ứng dụng" hoặc "Thêm vào Màn hình chính"</strong>
+                <p>Trình duyệt sẽ tự động thêm ứng dụng vào danh sách ứng dụng điện thoại và tạo biểu tượng truy cập tức thì.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Benefit Highlights -->
+        <div class="pwa-benefits-banner" style="margin-top: 18px; padding: 12px 14px; background: var(--bg-neutral); border-radius: 8px; font-size: 0.8rem; color: var(--slate-600); display: flex; gap: 14px; align-items: center;">
+          <span style="font-size: 1.4rem;">💡</span>
+          <div>
+            <strong>Lợi ích khi cài App:</strong> Khởi chạy siêu nhanh không tốn dung lượng, chạy mượt mà ngay cả khi mạng chập chờn và nhận chuông cảnh báo lỗi HSBA trực tiếp.
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="btn-modal-pwa-close">Đã hiểu</button>
+      </div>
+    `;
+
+    this.renderModal(html, 'modal-md');
+    document.getElementById('btn-modal-close').onclick = () => this.closeModal();
+    document.getElementById('btn-modal-pwa-close').onclick = () => this.closeModal();
+
+    // Direct install button inside modal
+    const directBtn = document.getElementById('btn-modal-direct-install');
+    if (directBtn) {
+      directBtn.onclick = async () => {
+        this.closeModal();
+        if (this.app && typeof this.app.triggerPWAInstall === 'function') {
+          this.app.triggerPWAInstall();
+        }
+      };
+    }
+
+    // Toggle OS tabs
+    const iosTab = document.getElementById('tab-btn-ios');
+    const androidTab = document.getElementById('tab-btn-android');
+    const iosPane = document.getElementById('pwa-pane-ios');
+    const androidPane = document.getElementById('pwa-pane-android');
+
+    if (iosTab && androidTab && iosPane && androidPane) {
+      iosTab.onclick = () => {
+        iosTab.classList.add('active');
+        androidTab.classList.remove('active');
+        iosPane.style.display = 'block';
+        androidPane.style.display = 'none';
+      };
+      androidTab.onclick = () => {
+        androidTab.classList.add('active');
+        iosTab.classList.remove('active');
+        iosPane.style.display = 'none';
+        androidPane.style.display = 'block';
+      };
+    }
   }
 }

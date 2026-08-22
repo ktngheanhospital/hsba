@@ -59,30 +59,18 @@ export class StorageService {
       const reps = this.getDischargeReports().filter(r => !mockRepIds.includes(r.id));
       this.saveDischargeReports(reps);
 
-      // Dọn dẹp danh sách nhân sự mock nếu có
-      let staff = this.getStaff();
-      const hasMockStaff = staff.some(s => legacyMockStaffIds.includes(s.id) || (s.name && s.name.includes('Trần Thị Mai')));
-      if (hasMockStaff) {
-        // Giữ lại các nhân sự do người dùng tự tạo mới (không nằm trong list mock cũ)
-        const customStaff = staff.filter(s => !legacyMockStaffIds.includes(s.id) && !s.id.startsWith('NV_'));
-        this.saveStaff([...DEFAULT_STAFF, ...customStaff]);
-      } else {
-        // Đảm bảo không còn role NHOM_1 cũ trong danh sách
-        const hasLegacyRole = staff.some(s => s.defaultRole === 'NHOM_1');
-        if (hasLegacyRole) {
-          this.saveStaff(staff.map(s => s.defaultRole === 'NHOM_1' ? { ...s, defaultRole: 'KETOAN_BH' } : s));
-        }
-      }
-
-      // Cập nhật người dùng hiện tại nếu đang là user mock cũ hoặc có role NHOM_1
-      const currentUser = this.getCurrentUser();
-      if (currentUser) {
-        if (legacyMockStaffIds.includes(currentUser.id) || (currentUser.name && currentUser.name.includes('Trần Thị Mai'))) {
-          const cleanUser = DEFAULT_STAFF.find(s => s.defaultRole === currentUser.defaultRole) || DEFAULT_STAFF[0];
-          this.setCurrentUser(cleanUser);
-        } else if (currentUser.defaultRole === 'NHOM_1') {
-          this.setCurrentUser({ ...currentUser, defaultRole: 'KETOAN_BH' });
-        }
+      // Chỉ lọc bỏ các tài khoản mockup cũ có tên 'Trần Thị Mai' hoặc ID rác NV00..
+      const staffJson = localStorage.getItem(STORAGE_KEYS.STAFF);
+      if (staffJson) {
+        try {
+          let staff = JSON.parse(staffJson);
+          if (Array.isArray(staff)) {
+            const cleaned = staff.filter(s => !legacyMockStaffIds.includes(s.id) && !(s.name && s.name.includes('Trần Thị Mai')));
+            if (cleaned.length !== staff.length) {
+              this.saveStaff(cleaned);
+            }
+          }
+        } catch (err) {}
       }
     } catch (e) {
       console.warn('Lỗi khi dọn dẹp mockup:', e);
@@ -185,24 +173,29 @@ export class StorageService {
     }
 
     const cleanUser = username.trim().toLowerCase();
+    const cleanPass = password ? password.trim() : '';
     const staffList = this.getStaff();
 
+    // Tìm theo username, số điện thoại, mã nhân viên (id), tên, hoặc role
     // Tìm chính xác theo username, số điện thoại, mã nhân viên (id) hoặc tên
     const staff = staffList.find(s => 
       (s.username && s.username.toLowerCase() === cleanUser) ||
-      (s.phone && s.phone.replace(/[^0-9]/g, '') === cleanUser.replace(/[^0-9]/g, '')) ||
+      (s.phone && s.phone.replace(/[^0-9]/g, '') === cleanUser.replace(/[^0-9]/g, '') && cleanUser.length >= 8) ||
       (s.id && s.id.toLowerCase() === cleanUser) ||
       (s.name && s.name.toLowerCase() === cleanUser)
     );
 
     if (!staff) {
-      return { success: false, message: 'Tài khoản không tồn tại trong hệ thống! Vui lòng chọn tài khoản mẫu bên dưới.' };
+      return { success: false, message: 'Tài khoản không tồn tại trong hệ thống!' };
     }
 
-    // Kiểm tra mật khẩu (mặc định '123' hoặc khớp password đã lưu)
-    const expectedPass = staff.password || '123';
-    if (password && password !== expectedPass && password !== '123' && password !== 'admin123') {
-      return { success: false, message: 'Mật khẩu không chính xác! (Mật khẩu mặc định: 123)' };
+    // Kiểm tra chính xác mật khẩu của tài khoản đó
+    const expectedPass = staff.password !== undefined && staff.password !== null && staff.password !== '' 
+      ? String(staff.password).trim() 
+      : '123';
+
+    if (cleanPass !== expectedPass) {
+      return { success: false, message: 'Mật khẩu không chính xác!' };
     }
 
     this.setCurrentUser(staff);
@@ -274,6 +267,11 @@ export class StorageService {
   getRoleDetails(roleId = null) {
     const activeRoleId = roleId || this.getCurrentRole();
     return ROLES[activeRoleId] || ROLES.ADMIN;
+  }
+
+  isAdmin(roleId = null) {
+    const activeRole = roleId || this.getCurrentRole();
+    return activeRole === 'ADMIN';
   }
 
   // PHÂN QUYỀN CÁC KHÂU KIỂM LỖI CHUYÊN MÔN:
@@ -826,15 +824,24 @@ export class StorageService {
   getStaff() {
     try {
       const staffJson = localStorage.getItem(STORAGE_KEYS.STAFF);
-      const list = staffJson ? JSON.parse(staffJson) : DEFAULT_STAFF;
+      let list = staffJson !== null ? JSON.parse(staffJson) : null;
+      
+      if (!list || !Array.isArray(list)) {
+        list = [...DEFAULT_STAFF];
+        localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(list));
+      }
+
       return list.map(s => {
         if (s.defaultRole === 'NHOM_1') {
           return { ...s, defaultRole: 'KETOAN_BH' };
         }
+        if (!s.username) {
+          s.username = s.id ? s.id.toLowerCase() : 'user';
+        }
         return s;
       });
     } catch (e) {
-      return DEFAULT_STAFF;
+      return [...DEFAULT_STAFF];
     }
   }
 
