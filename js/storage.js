@@ -15,12 +15,75 @@ const STORAGE_KEYS = {
   CURRENT_ROLE: 'theo_doi_hsba_role_v5',
   PERMISSIONS: 'theo_doi_hsba_permissions_v5',
   ACTIVE_DEPT: 'theo_doi_hsba_active_dept_v5',
-  CURRENT_USER: 'theo_doi_hsba_current_user_v5'
+  CURRENT_USER: 'theo_doi_hsba_current_user_v5',
+  TOMBSTONES: 'theo_doi_hsba_tombstones_v5'
 };
 
 export class StorageService {
   constructor() {
+    this.broadcastChannel = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        this.broadcastChannel = new BroadcastChannel('hsba_tab_sync_channel');
+        this.broadcastChannel.onmessage = (event) => {
+          if (event && event.data && event.data.type === 'DATA_UPDATED') {
+            console.log('🔄 Đồng bộ dữ liệu giữa các tab qua BroadcastChannel');
+            if (window.hsbaApp && typeof window.hsbaApp.refreshAllViews === 'function') {
+              window.hsbaApp.refreshAllViews();
+            }
+          }
+        };
+      }
+    } catch (e) {}
+
     this.initStorage();
+  }
+
+  notifyTabs() {
+    try {
+      if (this.broadcastChannel) {
+        this.broadcastChannel.postMessage({ type: 'DATA_UPDATED', timestamp: Date.now() });
+      }
+    } catch (e) {}
+  }
+
+  // --- QUẢN LÝ DANH SÁCH BẢN GHI ĐÃ XÓA (TOMBSTONES) ---
+  getTombstones() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.TOMBSTONES);
+      return raw ? JSON.parse(raw) : { records: {}, discharge: {}, departments: {}, staff: {} };
+    } catch (e) {
+      return { records: {}, discharge: {}, departments: {}, staff: {} };
+    }
+  }
+
+  saveTombstones(ts) {
+    try {
+      localStorage.setItem(STORAGE_KEYS.TOMBSTONES, JSON.stringify(ts));
+    } catch (e) {}
+  }
+
+  addTombstone(type, id) {
+    if (!id) return;
+    const ts = this.getTombstones();
+    if (!ts[type]) ts[type] = {};
+    ts[type][String(id)] = Date.now();
+    this.saveTombstones(ts);
+  }
+
+  isTombstoned(type, id) {
+    if (!id) return false;
+    const ts = this.getTombstones();
+    return !!(ts[type] && ts[type][String(id)]);
+  }
+
+  removeTombstone(type, id) {
+    if (!id) return;
+    const ts = this.getTombstones();
+    if (ts[type] && ts[type][String(id)]) {
+      delete ts[type][String(id)];
+      this.saveTombstones(ts);
+    }
   }
 
   initStorage() {
@@ -31,7 +94,7 @@ export class StorageService {
       this.cleanMockData();
     }
 
-    // Tự động đồng bộ với Supabase Cloud Database
+    // Tự động đồng bộ với Supabase Cloud Database & Kích hoạt Realtime
     setTimeout(() => {
       supabaseService.autoInitSync(this, () => {
         if (window.hsbaApp) {
@@ -43,7 +106,14 @@ export class StorageService {
       supabaseService.subscribeRealtime((table, payload) => {
         this.handleRealtimeEvent(table, payload);
       });
-    }, 300);
+
+      // Khởi động Heartbeat Polling & Focus Sync tự động
+      supabaseService.startHeartbeatSync(this, () => {
+        if (window.hsbaApp && typeof window.hsbaApp.refreshAllViews === 'function') {
+          window.hsbaApp.refreshAllViews();
+        }
+      });
+    }, 200);
   }
 
   // Tự động dọn dẹp các mockup dữ liệu mẫu ban đầu (không xóa dữ liệu thật của người dùng)
@@ -70,10 +140,15 @@ export class StorageService {
   }
 
   handleRealtimeEvent(table, payload) {
+    if (!payload) return;
     console.log(`⚡ Realtime update từ Cloud [${table}]:`, payload.eventType);
+
     if (table === 'records') {
       if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+        if (!payload.new) return;
         const record = supabaseService.dbToRecord(payload.new);
+        if (this.isTombstoned('records', record.id)) return;
+
         const records = this.getRecords();
         const idx = records.findIndex(r => r.id === record.id);
         if (idx !== -1) {
@@ -90,52 +165,78 @@ export class StorageService {
         }
         this.saveRecords(records);
       } else if (payload.eventType === 'DELETE') {
-        let records = this.getRecords();
-        records = records.filter(r => r.id !== payload.old.id);
-        this.saveRecords(records);
+        const delId = payload.old ? (payload.old.id || payload.old.ma_kcb) : null;
+        if (delId) {
+          this.addTombstone('records', delId);
+          let records = this.getRecords();
+          records = records.filter(r => r.id !== String(delId) && r.id !== delId && r.maKCB !== delId);
+          this.saveRecords(records);
+        }
       }
     } else if (table === 'discharge_reports') {
       if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+        if (!payload.new) return;
         const rep = supabaseService.dbToDischarge(payload.new);
+        if (this.isTombstoned('discharge', rep.id)) return;
+
         const reps = this.getDischargeReports();
         const idx = reps.findIndex(r => r.id === rep.id);
         if (idx !== -1) reps[idx] = rep;
         else reps.unshift(rep);
         this.saveDischargeReports(reps);
       } else if (payload.eventType === 'DELETE') {
-        let reps = this.getDischargeReports();
-        reps = reps.filter(r => r.id !== payload.old.id);
-        this.saveDischargeReports(reps);
+        const delId = payload.old ? (payload.old.id || payload.old.ma_kcb) : null;
+        if (delId) {
+          this.addTombstone('discharge', delId);
+          let reps = this.getDischargeReports();
+          reps = reps.filter(r => r.id !== String(delId) && r.id !== delId && r.maKCB !== delId);
+          this.saveDischargeReports(reps);
+        }
       }
     } else if (table === 'departments') {
       if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+        if (!payload.new) return;
         const dept = supabaseService.dbToDept(payload.new);
+        if (this.isTombstoned('departments', dept.id)) return;
+
         const depts = this.getDepartments();
         const idx = depts.findIndex(d => d.id === dept.id);
         if (idx !== -1) depts[idx] = dept;
         else depts.push(dept);
         this.saveDepartments(depts);
       } else if (payload.eventType === 'DELETE') {
-        let depts = this.getDepartments();
-        depts = depts.filter(d => d.id !== payload.old.id);
-        this.saveDepartments(depts);
+        const delId = payload.old ? payload.old.id : null;
+        if (delId) {
+          this.addTombstone('departments', delId);
+          let depts = this.getDepartments();
+          depts = depts.filter(d => d.id !== String(delId) && d.id !== delId);
+          this.saveDepartments(depts);
+        }
       }
     } else if (table === 'staff') {
       if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+        if (!payload.new) return;
         const staffMember = supabaseService.dbToStaff(payload.new);
+        if (this.isTombstoned('staff', staffMember.id)) return;
+
         const staffList = this.getStaff();
         const idx = staffList.findIndex(s => s.id === staffMember.id);
         if (idx !== -1) staffList[idx] = staffMember;
         else staffList.push(staffMember);
         this.saveStaff(staffList);
       } else if (payload.eventType === 'DELETE') {
-        let staffList = this.getStaff();
-        staffList = staffList.filter(s => s.id !== payload.old.id);
-        this.saveStaff(staffList);
+        const delId = payload.old ? payload.old.id : null;
+        if (delId) {
+          this.addTombstone('staff', delId);
+          let staffList = this.getStaff();
+          staffList = staffList.filter(s => s.id !== String(delId) && s.id !== delId);
+          this.saveStaff(staffList);
+        }
       }
     }
 
-    if (window.hsbaApp) {
+    this.notifyTabs();
+    if (window.hsbaApp && typeof window.hsbaApp.refreshAllViews === 'function') {
       window.hsbaApp.refreshAllViews();
     }
   }
@@ -473,9 +574,11 @@ export class StorageService {
       zaloHistory: recordData.pushHistory || recordData.zaloHistory || []
     };
 
+    this.removeTombstone('records', newId);
     records.unshift(newRecord);
     this.saveRecords(records);
     this.syncDischargeReportsKetoan(newRecord.maKCB);
+    this.notifyTabs();
     supabaseService.upsertRecord(newRecord);
     return newRecord;
   }
@@ -494,11 +597,14 @@ export class StorageService {
 
     this.saveRecords(records);
     this.syncDischargeReportsKetoan(records[index].maKCB);
+    this.notifyTabs();
     supabaseService.upsertRecord(records[index]);
     return records[index];
   }
 
   deleteRecord(recordId) {
+    if (!recordId) return false;
+    this.addTombstone('records', recordId);
     let records = this.getRecords();
     const initialLen = records.length;
     const targetRecord = records.find(r => r.id === recordId);
@@ -509,9 +615,11 @@ export class StorageService {
       if (targetMaKCB) {
         this.syncDischargeReportsKetoan(targetMaKCB);
       }
+      this.notifyTabs();
       supabaseService.deleteRecord(recordId);
       return true;
     }
+    supabaseService.deleteRecord(recordId);
     return false;
   }
 
@@ -590,6 +698,7 @@ export class StorageService {
   addDischargeReport(reportData) {
     const reports = this.getDischargeReports();
     const newId = 'BCRV-' + Date.now().toString(36).toUpperCase();
+    this.removeTombstone('discharge', newId);
     const today = new Date().toISOString().slice(0, 10);
     const reportDate = reportData.ngayBaoCao || today;
 
@@ -630,6 +739,7 @@ export class StorageService {
 
     reports.unshift(newReport);
     this.saveDischargeReports(reports);
+    this.notifyTabs();
     supabaseService.upsertDischargeReport(newReport);
     return newReport;
   }
@@ -644,6 +754,7 @@ export class StorageService {
     reportsList.forEach((item, idx) => {
       if (item.maKCB && item.tenBenhNhan) {
         const newId = 'BCRV-' + (Date.now() + idx).toString(36).toUpperCase();
+        this.removeTombstone('discharge', newId);
         const reportDate = item.ngayBaoCao || today;
 
         let defaultDischargeTime = '';
@@ -685,6 +796,7 @@ export class StorageService {
     });
 
     this.saveDischargeReports(currentReports);
+    this.notifyTabs();
     supabaseService.upsertBatchDischargeReports(createdList);
     return createdList;
   }
@@ -700,23 +812,28 @@ export class StorageService {
     };
 
     this.saveDischargeReports(reports);
+    this.notifyTabs();
     supabaseService.upsertDischargeReport(reports[index]);
     return reports[index];
   }
 
   deleteDischargeReport(reportId) {
+    if (!reportId) return false;
     if (!this.canDeleteDischargeReport()) {
       console.warn('Quyền bị từ chối: Chỉ nhóm Khoa / Bác sĩ điều trị hoặc Admin mới có quyền xóa báo cáo ra viện!');
       return false;
     }
+    this.addTombstone('discharge', reportId);
     let reports = this.getDischargeReports();
     const initialLen = reports.length;
     reports = reports.filter(r => r.id !== reportId);
     if (reports.length !== initialLen) {
       this.saveDischargeReports(reports);
+      this.notifyTabs();
       supabaseService.deleteDischargeReport(reportId);
       return true;
     }
+    supabaseService.deleteDischargeReport(reportId);
     return false;
   }
 
@@ -749,9 +866,11 @@ export class StorageService {
       return !isNaN(num) && num > max ? num : max;
     }, 0);
     const newId = 'KP' + String(maxNum + 1).padStart(2, '0');
+    this.removeTombstone('departments', newId);
     const newDept = { id: newId, name: cleanName, code: cleanCode, order: depts.length + 1 };
     depts.push(newDept);
     this.saveDepartments(depts);
+    this.notifyTabs();
     supabaseService.upsertDepartment(newDept);
     return newDept;
   }
@@ -766,6 +885,7 @@ export class StorageService {
 
       depts[index] = { ...depts[index], ...updates, name: newName, code: newCode };
       this.saveDepartments(depts);
+      this.notifyTabs();
       supabaseService.upsertDepartment(depts[index]);
 
       // Cascade update to records, staff, discharge_reports, and activeDepartment if department name changed
@@ -815,9 +935,12 @@ export class StorageService {
   }
 
   deleteDepartment(id) {
+    if (!id) return false;
+    this.addTombstone('departments', id);
     let depts = this.getDepartments();
     depts = depts.filter(d => d.id !== id);
     this.saveDepartments(depts);
+    this.notifyTabs();
     supabaseService.deleteDepartment(id);
     return true;
   }
@@ -854,6 +977,7 @@ export class StorageService {
   addStaff(staffMember) {
     const staffList = this.getStaff();
     const newId = 'NV' + String(staffList.length + 1).padStart(2, '0');
+    this.removeTombstone('staff', newId);
     const roleKey = staffMember.defaultRole || 'NHOM_2';
     
     // Tự sinh username nếu chưa có
@@ -885,6 +1009,7 @@ export class StorageService {
     };
     staffList.push(newStaff);
     this.saveStaff(staffList);
+    this.notifyTabs();
     supabaseService.upsertStaff(newStaff);
     return newStaff;
   }
@@ -895,6 +1020,7 @@ export class StorageService {
     if (index !== -1) {
       staffList[index] = { ...staffList[index], ...updates };
       this.saveStaff(staffList);
+      this.notifyTabs();
       supabaseService.upsertStaff(staffList[index]);
 
       // Đồng bộ tức thời hồ sơ và phân quyền nếu nhân viên này đang đăng nhập
@@ -909,9 +1035,12 @@ export class StorageService {
   }
 
   deleteStaff(id) {
+    if (!id) return false;
+    this.addTombstone('staff', id);
     let staffList = this.getStaff();
     staffList = staffList.filter(s => s.id !== id);
     this.saveStaff(staffList);
+    this.notifyTabs();
     supabaseService.deleteStaff(id);
     return true;
   }

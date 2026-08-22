@@ -22,6 +22,10 @@ class SupabaseService {
     this.isConnected = false;
     this.isSyncing = false;
     this.subscribers = [];
+    this.realtimeChannel = null;
+    this.realtimeCallback = null;
+    this.heartbeatTimer = null;
+    this.lastSyncTimestamp = 0;
     this.initClient();
   }
 
@@ -51,7 +55,12 @@ class SupabaseService {
     try {
       if (window.supabase && typeof window.supabase.createClient === 'function') {
         this.client = window.supabase.createClient(url, key, {
-          auth: { persistSession: false }
+          auth: { persistSession: false },
+          realtime: {
+            params: {
+              eventsPerSecond: 10
+            }
+          }
         });
         this.testConnection();
       } else {
@@ -59,7 +68,12 @@ class SupabaseService {
         import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm')
           .then(module => {
             this.client = module.createClient(url, key, {
-              auth: { persistSession: false }
+              auth: { persistSession: false },
+              realtime: {
+                params: {
+                  eventsPerSecond: 10
+                }
+              }
             });
             window.supabase = module;
             this.testConnection();
@@ -82,11 +96,17 @@ class SupabaseService {
       if (!error) {
         this.isConnected = true;
         this.notifyStatus(true, 'Đã kết nối Supabase Cloud Database');
+        if (this.realtimeCallback && !this.realtimeChannel) {
+          this.subscribeRealtime(this.realtimeCallback);
+        }
         return true;
       } else {
         console.warn('Supabase test query notice:', error.message);
         this.isConnected = true; // Connection reached server
         this.notifyStatus(true, 'Kết nối thành công tới Supabase');
+        if (this.realtimeCallback && !this.realtimeChannel) {
+          this.subscribeRealtime(this.realtimeCallback);
+        }
         return true;
       }
     } catch (e) {
@@ -105,7 +125,11 @@ class SupabaseService {
   }
 
   notifyStatus(connected, message) {
-    this.subscribers.forEach(cb => cb({ connected, message, url: this.getUrl() }));
+    this.subscribers.forEach(cb => {
+      try {
+        cb({ connected, message, url: this.getUrl() });
+      } catch (err) {}
+    });
   }
 
   // =========================================================================
@@ -114,11 +138,11 @@ class SupabaseService {
 
   recordToDb(r) {
     return {
-      id: r.id,
-      ma_kcb: r.maKCB,
-      ten_benh_nhan: r.tenBenhNhan,
-      khoa_phong: r.khoaPhong,
-      nguoi_chi_dinh: r.nguoiChiDinh,
+      id: String(r.id),
+      ma_kcb: r.maKCB || '',
+      ten_benh_nhan: r.tenBenhNhan || '',
+      khoa_phong: r.khoaPhong || '',
+      nguoi_chi_dinh: r.nguoiChiDinh || '',
       ngay_vao_khoa: r.ngayVaoKhoa || null,
       ngay_kiem_ho_so: r.ngayKiemHoSo || null,
       thoi_gian_chi_dinh_yl: r.thoiGianChiDinhYL || null,
@@ -165,13 +189,13 @@ class SupabaseService {
 
   dischargeToDb(r) {
     return {
-      id: r.id,
-      ngay_bao_cao: r.ngayBaoCao,
+      id: String(r.id),
+      ngay_bao_cao: r.ngayBaoCao || '',
       ngay_ra_vien: r.ngayRaVien || null,
-      ma_kcb: r.maKCB,
-      ten_benh_nhan: r.tenBenhNhan,
-      ten_bac_si: r.tenBacSi,
-      phong: r.phong,
+      ma_kcb: r.maKCB || '',
+      ten_benh_nhan: r.tenBenhNhan || '',
+      ten_bac_si: r.tenBacSi || '',
+      phong: r.phong || '',
       nguoi_bao_cao: r.nguoiBaoCao || '',
       kiem_duoc: r.kiemDuoc || { status: 'CO_LOI', note: '' },
       kiem_ketoan_bh: r.kiemKeToanBH || { status: 'CO_LOI', note: '' },
@@ -207,47 +231,47 @@ class SupabaseService {
 
   deptToDb(d) {
     return {
-      id: d.id,
-      name: d.name,
-      code: d.code,
+      id: String(d.id),
+      name: d.name || '',
+      code: d.code || '',
       order: d.order || 0
     };
   }
 
   dbToDept(row) {
     return {
-      id: row.id,
-      name: row.name,
-      code: row.code,
+      id: String(row.id),
+      name: row.name || '',
+      code: row.code || '',
       order: row.order || 0
     };
   }
 
   staffToDb(s) {
     return {
-      id: s.id,
-      username: s.username,
+      id: String(s.id),
+      username: s.username || '',
       password: s.password || '123',
-      name: s.name,
-      department: s.department,
+      name: s.name || '',
+      department: s.department || '',
       position: s.position || '',
       phone: s.phone || '',
-      zalo_id: s.zaloId || '',
-      default_role: s.defaultRole || 'NHOM_2',
-      avatar_emoji: s.avatarEmoji || '👨‍⚕️'
+      zalo_id: s.zaloId || s.zalo_id || '',
+      default_role: s.defaultRole || s.default_role || 'NHOM_2',
+      avatar_emoji: s.avatarEmoji || s.avatar_emoji || '👨‍⚕️'
     };
   }
 
   dbToStaff(row) {
     return {
-      id: row.id,
-      username: row.username,
+      id: String(row.id),
+      username: row.username || '',
       password: row.password || '123',
-      name: row.name,
-      department: row.department,
-      position: row.position,
-      phone: row.phone,
-      zaloId: row.zalo_id || row.zaloId,
+      name: row.name || '',
+      department: row.department || '',
+      position: row.position || '',
+      phone: row.phone || '',
+      zaloId: row.zalo_id || row.zaloId || '',
       defaultRole: row.default_role || row.defaultRole || 'NHOM_2',
       avatarEmoji: row.avatar_emoji || row.avatarEmoji || '👨‍⚕️'
     };
@@ -261,7 +285,6 @@ class SupabaseService {
   async fetchRecords() {
     if (!this.client) return null;
     try {
-      // Fetch without forcing order on created_at to avoid column not found error
       let { data, error } = await this.client.from('records').select('*');
       if (error) {
         console.warn('Lỗi khi fetch records từ Supabase:', error);
@@ -275,11 +298,13 @@ class SupabaseService {
   }
 
   async upsertRecord(record) {
-    if (!this.client) return false;
+    if (!this.client || !record) return false;
     try {
       const dbRow = this.recordToDb(record);
       const { error } = await this.client.from('records').upsert(dbRow);
-      if (error) throw error;
+      if (error) {
+        console.warn('Supabase upsertRecord warning:', error.message);
+      }
       return true;
     } catch (e) {
       console.warn('Lỗi khi upsert record lên Supabase:', e);
@@ -288,10 +313,14 @@ class SupabaseService {
   }
 
   async deleteRecord(recordId) {
-    if (!this.client) return false;
+    if (!this.client || !recordId) return false;
     try {
-      const { error } = await this.client.from('records').delete().eq('id', recordId);
-      if (error) throw error;
+      const sId = String(recordId);
+      let { error } = await this.client.from('records').delete().eq('id', sId);
+      if (error) {
+        // Thử tìm theo ma_kcb nếu có
+        await this.client.from('records').delete().eq('ma_kcb', sId);
+      }
       return true;
     } catch (e) {
       console.warn('Lỗi khi delete record trên Supabase:', e);
@@ -316,11 +345,13 @@ class SupabaseService {
   }
 
   async upsertDischargeReport(report) {
-    if (!this.client) return false;
+    if (!this.client || !report) return false;
     try {
       const dbRow = this.dischargeToDb(report);
       const { error } = await this.client.from('discharge_reports').upsert(dbRow);
-      if (error) throw error;
+      if (error) {
+        console.warn('Supabase upsertDischargeReport warning:', error.message);
+      }
       return true;
     } catch (e) {
       console.warn('Lỗi khi upsert discharge report lên Supabase:', e);
@@ -333,7 +364,9 @@ class SupabaseService {
     try {
       const dbRows = reportsList.map(r => this.dischargeToDb(r));
       const { error } = await this.client.from('discharge_reports').upsert(dbRows);
-      if (error) throw error;
+      if (error) {
+        console.warn('Supabase upsertBatchDischargeReports warning:', error.message);
+      }
       return true;
     } catch (e) {
       console.warn('Lỗi khi upsert batch discharge reports lên Supabase:', e);
@@ -342,10 +375,13 @@ class SupabaseService {
   }
 
   async deleteDischargeReport(reportId) {
-    if (!this.client) return false;
+    if (!this.client || !reportId) return false;
     try {
-      const { error } = await this.client.from('discharge_reports').delete().eq('id', reportId);
-      if (error) throw error;
+      const sId = String(reportId);
+      let { error } = await this.client.from('discharge_reports').delete().eq('id', sId);
+      if (error) {
+        await this.client.from('discharge_reports').delete().eq('ma_kcb', sId);
+      }
       return true;
     } catch (e) {
       console.warn('Lỗi khi delete discharge report trên Supabase:', e);
@@ -367,7 +403,7 @@ class SupabaseService {
   }
 
   async upsertDepartment(dept) {
-    if (!this.client) return false;
+    if (!this.client || !dept) return false;
     try {
       const dbRow = this.deptToDb(dept);
       const { error } = await this.client.from('departments').upsert(dbRow);
@@ -380,9 +416,9 @@ class SupabaseService {
   }
 
   async deleteDepartment(deptId) {
-    if (!this.client) return false;
+    if (!this.client || !deptId) return false;
     try {
-      const { error } = await this.client.from('departments').delete().eq('id', deptId);
+      const { error } = await this.client.from('departments').delete().eq('id', String(deptId));
       if (error) throw error;
       return true;
     } catch (e) {
@@ -406,7 +442,7 @@ class SupabaseService {
   }
 
   async upsertStaff(member) {
-    if (!this.client) return false;
+    if (!this.client || !member) return false;
     try {
       const dbRow = this.staffToDb(member);
       const { error } = await this.client.from('staff').upsert(dbRow);
@@ -419,9 +455,9 @@ class SupabaseService {
   }
 
   async deleteStaff(staffId) {
-    if (!this.client) return false;
+    if (!this.client || !staffId) return false;
     try {
-      const { error } = await this.client.from('staff').delete().eq('id', staffId);
+      const { error } = await this.client.from('staff').delete().eq('id', String(staffId));
       if (error) throw error;
       return true;
     } catch (e) {
@@ -431,7 +467,7 @@ class SupabaseService {
   }
 
   // =========================================================================
-  // ĐỒNG BỘ TOÀN DIỆN (FULL SYNC / SEEDING INITIAL DATA)
+  // ĐỒNG BỘ TOÀN DIỆN (FULL SYNC / SMART SYNC)
   // =========================================================================
 
   // Đẩy toàn bộ dữ liệu từ LocalStorage lên Supabase
@@ -468,121 +504,229 @@ class SupabaseService {
 
   // Đồng bộ thông minh 2 chiều (Smart 2-Way Sync): Bảo toàn dữ liệu cục bộ và hòa nhập dữ liệu Cloud
   async smartSync(storageService) {
-    if (!this.client) return;
+    if (!this.client || this.isSyncing) return;
     this.isSyncing = true;
+    let hasLocalChanges = false;
 
     try {
+      const tombstones = storageService.getTombstones ? storageService.getTombstones() : {
+        records: [],
+        discharge: [],
+        departments: [],
+        staff: []
+      };
+
       // 1. Departments (Danh mục Khoa/Phòng)
-      const localDepts = storageService.getDepartments();
+      let localDepts = storageService.getDepartments();
       const cloudDepts = await this.fetchDepartments();
 
       if (cloudDepts !== null) {
-        if (cloudDepts.length === 0 && localDepts.length > 0) {
-          // Cloud trống -> Seed local lên cloud
+        // Purge tombstoned departments from cloud
+        if (tombstones.departments && tombstones.departments.length) {
+          tombstones.departments.forEach(tId => {
+            if (cloudDepts.some(cd => String(cd.id) === String(tId))) {
+              this.deleteDepartment(tId);
+            }
+          });
+        }
+
+        const validCloudDepts = cloudDepts.filter(cd => !storageService.isTombstoned('departments', cd.id));
+        localDepts = localDepts.filter(ld => !storageService.isTombstoned('departments', ld.id));
+
+        if (validCloudDepts.length === 0 && localDepts.length > 0) {
           await this.client.from('departments').upsert(localDepts.map(d => this.deptToDb(d)));
-        } else if (cloudDepts.length > 0) {
-          // Push any local departments missing on cloud
+        } else if (validCloudDepts.length > 0) {
           const deptsToPush = localDepts.filter(ld => 
-            !cloudDepts.some(cd => cd.id === ld.id || (cd.name && ld.name && cd.name.trim().toLowerCase() === ld.name.trim().toLowerCase()))
+            !validCloudDepts.some(cd => String(cd.id) === String(ld.id) || (cd.name && ld.name && cd.name.trim().toLowerCase() === ld.name.trim().toLowerCase()))
           );
           if (deptsToPush.length) {
             await this.client.from('departments').upsert(deptsToPush.map(d => this.deptToDb(d)));
           }
 
-          // Hợp nhất danh sách không làm mất khoa/phòng người dùng vừa tạo
           const mergedDepts = [...localDepts];
-          cloudDepts.forEach(cd => {
-            const exists = mergedDepts.some(md => md.id === cd.id || (md.name && cd.name && md.name.trim().toLowerCase() === cd.name.trim().toLowerCase()));
+          validCloudDepts.forEach(cd => {
+            const exists = mergedDepts.some(md => String(md.id) === String(cd.id) || (md.name && cd.name && md.name.trim().toLowerCase() === cd.name.trim().toLowerCase()));
             if (!exists) {
               mergedDepts.push(cd);
+              hasLocalChanges = true;
             }
           });
-          storageService.saveDepartments(mergedDepts);
+
+          if (mergedDepts.length !== localDepts.length) {
+            storageService.saveDepartments(mergedDepts);
+            hasLocalChanges = true;
+          }
         }
       }
 
       // 2. Staff (Nhân viên)
-      const localStaff = storageService.getStaff();
+      let localStaff = storageService.getStaff();
       const cloudStaff = await this.fetchStaff();
 
       if (cloudStaff !== null) {
-        if (cloudStaff.length === 0 && localStaff.length > 0) {
+        if (tombstones.staff && tombstones.staff.length) {
+          tombstones.staff.forEach(tId => {
+            if (cloudStaff.some(cs => String(cs.id) === String(tId))) {
+              this.deleteStaff(tId);
+            }
+          });
+        }
+
+        const validCloudStaff = cloudStaff.filter(cs => !storageService.isTombstoned('staff', cs.id));
+        localStaff = localStaff.filter(ls => !storageService.isTombstoned('staff', ls.id));
+
+        if (validCloudStaff.length === 0 && localStaff.length > 0) {
           await this.client.from('staff').upsert(localStaff.map(s => this.staffToDb(s)));
-        } else if (cloudStaff.length > 0) {
-          const staffToPush = localStaff.filter(ls => !cloudStaff.some(cs => cs.id === ls.id));
+        } else if (validCloudStaff.length > 0) {
+          const staffToPush = localStaff.filter(ls => !validCloudStaff.some(cs => String(cs.id) === String(ls.id)));
           if (staffToPush.length) {
             await this.client.from('staff').upsert(staffToPush.map(s => this.staffToDb(s)));
           }
 
           const mergedStaff = [...localStaff];
-          cloudStaff.forEach(cs => {
-            const exists = mergedStaff.some(ms => ms.id === cs.id);
-            if (!exists) {
+          validCloudStaff.forEach(cs => {
+            const idx = mergedStaff.findIndex(ms => String(ms.id) === String(cs.id));
+            if (idx === -1) {
               mergedStaff.push(cs);
+              hasLocalChanges = true;
+            } else {
+              // Update if changed
+              if (JSON.stringify(mergedStaff[idx]) !== JSON.stringify(cs)) {
+                mergedStaff[idx] = { ...mergedStaff[idx], ...cs };
+                hasLocalChanges = true;
+              }
             }
           });
-          storageService.saveStaff(mergedStaff);
+
+          if (hasLocalChanges || mergedStaff.length !== localStaff.length) {
+            storageService.saveStaff(mergedStaff);
+          }
         }
       }
 
       // 3. Records (Bản ghi lỗi HSBA)
-      const localRecords = storageService.getRecords();
+      let localRecords = storageService.getRecords();
       const cloudRecords = await this.fetchRecords();
 
       if (cloudRecords !== null) {
-        if (cloudRecords.length === 0 && localRecords.length > 0) {
+        // Xóa các bản ghi đã bị người dùng xóa trên máy này khỏi Supabase
+        if (tombstones.records && tombstones.records.length) {
+          tombstones.records.forEach(tId => {
+            if (cloudRecords.some(cr => String(cr.id) === String(tId))) {
+              this.deleteRecord(tId);
+            }
+          });
+        }
+
+        // Lọc bỏ các bản ghi đã bị tombstone khỏi Cloud dataset
+        const validCloudRecords = cloudRecords.filter(cr => !storageService.isTombstoned('records', cr.id));
+        localRecords = localRecords.filter(lr => !storageService.isTombstoned('records', lr.id));
+
+        if (validCloudRecords.length === 0 && localRecords.length > 0) {
           await this.client.from('records').upsert(localRecords.map(r => this.recordToDb(r)));
-        } else if (cloudRecords.length > 0) {
-          const recordsToPush = localRecords.filter(lr => !cloudRecords.some(cr => cr.id === lr.id));
+        } else if (validCloudRecords.length > 0) {
+          // Push any local record not yet on cloud
+          const recordsToPush = localRecords.filter(lr => !validCloudRecords.some(cr => String(cr.id) === String(lr.id)));
           if (recordsToPush.length) {
             await this.client.from('records').upsert(recordsToPush.map(r => this.recordToDb(r)));
           }
 
           const mergedRecords = [...localRecords];
-          cloudRecords.forEach(cr => {
-            const idx = mergedRecords.findIndex(mr => mr.id === cr.id);
+          validCloudRecords.forEach(cr => {
+            const idx = mergedRecords.findIndex(mr => String(mr.id) === String(cr.id));
             if (idx === -1) {
               mergedRecords.unshift(cr);
+              hasLocalChanges = true;
             } else {
-              mergedRecords[idx] = {
-                ...mergedRecords[idx],
-                ...cr,
-                lastPushSentAt: cr.lastPushSentAt || mergedRecords[idx].lastPushSentAt || null,
-                lastZaloSentAt: cr.lastZaloSentAt || mergedRecords[idx].lastZaloSentAt || null,
-                pushSentCount: Math.max(cr.pushSentCount || 0, mergedRecords[idx].pushSentCount || 0),
-                pushHistory: (cr.pushHistory && cr.pushHistory.length) ? cr.pushHistory : (mergedRecords[idx].pushHistory || [])
-              };
+              // Merge updates
+              const cur = mergedRecords[idx];
+              const updatedPushCount = Math.max(cr.pushSentCount || 0, cur.pushSentCount || 0);
+              const updatedLastPush = cr.lastPushSentAt || cur.lastPushSentAt || null;
+              
+              if (
+                cur.trangThaiLoi !== cr.trangThaiLoi ||
+                cur.yKienNguoiSua !== cr.yKienNguoiSua ||
+                cur.mucDoLoi !== cr.mucDoLoi ||
+                cur.pushSentCount !== updatedPushCount
+              ) {
+                mergedRecords[idx] = {
+                  ...cur,
+                  ...cr,
+                  pushSentCount: updatedPushCount,
+                  lastPushSentAt: updatedLastPush
+                };
+                hasLocalChanges = true;
+              }
             }
           });
-          storageService.saveRecords(mergedRecords);
+
+          if (hasLocalChanges || mergedRecords.length !== localRecords.length) {
+            storageService.saveRecords(mergedRecords);
+          }
         }
       }
 
       // 4. Discharge Reports (Báo cáo ra viện)
-      const localDischarge = storageService.getDischargeReports();
+      let localDischarge = storageService.getDischargeReports();
       const cloudDischarge = await this.fetchDischargeReports();
 
       if (cloudDischarge !== null) {
-        if (cloudDischarge.length === 0 && localDischarge.length > 0) {
+        if (tombstones.discharge && tombstones.discharge.length) {
+          tombstones.discharge.forEach(tId => {
+            if (cloudDischarge.some(cd => String(cd.id) === String(tId))) {
+              this.deleteDischargeReport(tId);
+            }
+          });
+        }
+
+        const validCloudDischarge = cloudDischarge.filter(cd => !storageService.isTombstoned('discharge', cd.id));
+        localDischarge = localDischarge.filter(ld => !storageService.isTombstoned('discharge', ld.id));
+
+        if (validCloudDischarge.length === 0 && localDischarge.length > 0) {
           await this.client.from('discharge_reports').upsert(localDischarge.map(r => this.dischargeToDb(r)));
-        } else if (cloudDischarge.length > 0) {
-          const repToPush = localDischarge.filter(lr => !cloudDischarge.some(cr => cr.id === lr.id));
+        } else if (validCloudDischarge.length > 0) {
+          const repToPush = localDischarge.filter(lr => !validCloudDischarge.some(cr => String(cr.id) === String(lr.id)));
           if (repToPush.length) {
             await this.client.from('discharge_reports').upsert(repToPush.map(r => this.dischargeToDb(r)));
           }
 
           const mergedReps = [...localDischarge];
-          cloudDischarge.forEach(cr => {
-            const idx = mergedReps.findIndex(mr => mr.id === cr.id);
+          validCloudDischarge.forEach(cr => {
+            const idx = mergedReps.findIndex(mr => String(mr.id) === String(cr.id));
             if (idx === -1) {
               mergedReps.unshift(cr);
+              hasLocalChanges = true;
             } else {
-              mergedReps[idx] = cr;
+              const cur = mergedReps[idx];
+              if (
+                cur.chotThongCong !== cr.chotThongCong ||
+                cur.ngayRaVien !== cr.ngayRaVien ||
+                JSON.stringify(cur.kiemDuoc) !== JSON.stringify(cr.kiemDuoc) ||
+                JSON.stringify(cur.kiemKeToanBH) !== JSON.stringify(cr.kiemKeToanBH) ||
+                JSON.stringify(cur.kiemKHTH) !== JSON.stringify(cr.kiemKHTH) ||
+                JSON.stringify(cur.kiemIT) !== JSON.stringify(cr.kiemIT)
+              ) {
+                mergedReps[idx] = cr;
+                hasLocalChanges = true;
+              }
             }
           });
-          storageService.saveDischargeReports(mergedReps);
+
+          if (hasLocalChanges || mergedReps.length !== localDischarge.length) {
+            storageService.saveDischargeReports(mergedReps);
+          }
         }
       }
+
+      // Cập nhật giao diện nếu có dữ liệu mới nhận từ Cloud
+      if (hasLocalChanges) {
+        storageService.notifyTabs();
+        if (window.hsbaApp && typeof window.hsbaApp.refreshAllViews === 'function') {
+          window.hsbaApp.refreshAllViews();
+        }
+      }
+
+      this.lastSyncTimestamp = Date.now();
     } catch (e) {
       console.warn('Lỗi trong quá trình smartSync:', e);
     } finally {
@@ -623,28 +767,84 @@ class SupabaseService {
   // REALTIME SUBSCRIPTION (LẮNG NGHE THAY ĐỔI THEO THỜI GIAN THỰC)
   // =========================================================================
   subscribeRealtime(onTableChange) {
+    if (typeof onTableChange === 'function') {
+      this.realtimeCallback = onTableChange;
+    }
     if (!this.client) return;
 
     try {
-      const channel = this.client
-        .channel('hsba-realtime-channel')
+      if (this.realtimeChannel) {
+        try {
+          this.client.removeChannel(this.realtimeChannel);
+        } catch (err) {}
+      }
+
+      this.realtimeChannel = this.client
+        .channel('hsba-realtime-channel-' + Date.now().toString(36))
         .on('postgres_changes', { event: '*', schema: 'public', table: 'records' }, (payload) => {
-          if (typeof onTableChange === 'function') onTableChange('records', payload);
+          if (typeof this.realtimeCallback === 'function') this.realtimeCallback('records', payload);
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'discharge_reports' }, (payload) => {
-          if (typeof onTableChange === 'function') onTableChange('discharge_reports', payload);
+          if (typeof this.realtimeCallback === 'function') this.realtimeCallback('discharge_reports', payload);
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'departments' }, (payload) => {
-          if (typeof onTableChange === 'function') onTableChange('departments', payload);
+          if (typeof this.realtimeCallback === 'function') this.realtimeCallback('departments', payload);
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'staff' }, (payload) => {
-          if (typeof onTableChange === 'function') onTableChange('staff', payload);
+          if (typeof this.realtimeCallback === 'function') this.realtimeCallback('staff', payload);
         })
-        .subscribe();
+        .subscribe((status) => {
+          console.log('📡 Realtime channel status:', status);
+          if (status === 'SUBSCRIBED') {
+            this.isConnected = true;
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            console.warn('⚠️ Realtime channel dropped, scheduling reconnection in 4s...');
+            setTimeout(() => {
+              if (this.realtimeCallback) this.subscribeRealtime(this.realtimeCallback);
+            }, 4000);
+          }
+        });
 
-      return channel;
+      return this.realtimeChannel;
     } catch (e) {
       console.warn('Lỗi khi đăng ký Realtime Supabase:', e);
+    }
+  }
+
+  // =========================================================================
+  // HEARTBEAT SYNC & MULTI-DEVICE INSTANT SYNC
+  // =========================================================================
+  startHeartbeatSync(storageService, onSync) {
+    // 1. Định kỳ 5s chạy đồng bộ thông minh một lần để nhận dữ liệu từ các máy khác
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = setInterval(async () => {
+      if (document.hidden) return; // Tiết kiệm băng thông khi tab ẩn
+      await this.smartSync(storageService);
+      if (typeof onSync === 'function') onSync();
+    }, 5000);
+
+    // 2. Đồng bộ ngay khi người dùng quay lại tab/cửa sổ (Page Visibility & Window Focus)
+    if (!this._hasBoundEvents) {
+      this._hasBoundEvents = true;
+      document.addEventListener('visibilitychange', async () => {
+        if (!document.hidden) {
+          console.log('👁️ Tab active: Đồng bộ tức thời dữ liệu Cloud...');
+          await this.smartSync(storageService);
+          if (typeof onSync === 'function') onSync();
+        }
+      });
+
+      window.addEventListener('focus', async () => {
+        await this.smartSync(storageService);
+        if (typeof onSync === 'function') onSync();
+      });
+
+      window.addEventListener('online', async () => {
+        console.log('🌐 Kết nối mạng phục hồi: Kiểm tra và đồng bộ...');
+        await this.testConnection();
+        await this.smartSync(storageService);
+        if (typeof onSync === 'function') onSync();
+      });
     }
   }
 }
