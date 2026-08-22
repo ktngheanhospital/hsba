@@ -3572,19 +3572,40 @@ class App {
   initPWA() {
     // 1. Đăng ký Service Worker
     if ('serviceWorker' in navigator) {
+      // Khi Service Worker mới kích hoạt và tiếp quản trang, tự động làm mới để người dùng nhận ngay giao diện mới nhất
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          console.log('🔄 [PWA] Service Worker mới đã tiếp quản, làm mới trang để tải bản cập nhật...');
+          window.location.reload();
+        }
+      });
+
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js', { scope: '/' })
           .then((registration) => {
             console.log('✅ [PWA] Service Worker đăng ký thành công với scope:', registration.scope);
+
+            // Chủ động kiểm tra cập nhật mới nhất từ server
+            registration.update();
+
+            // Nếu đã có Service Worker mới đang chờ kích hoạt (waiting)
+            if (registration.waiting) {
+              registration.waiting.postMessage('SKIP_WAITING');
+            }
 
             // Lắng nghe cập nhật Service Worker mới
             registration.onupdatefound = () => {
               const installingWorker = registration.installing;
               if (installingWorker) {
                 installingWorker.onstatechange = () => {
-                  if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    console.log('🔄 [PWA] Đã tải phiên bản mới của ứng dụng');
-                    showToast('Có bản cập nhật mới của ứng dụng Theo dõi HSBA!', 'info', 5000);
+                  if (installingWorker.state === 'installed') {
+                    if (navigator.serviceWorker.controller) {
+                      console.log('🔄 [PWA] Đã tải phiên bản mới của ứng dụng! Kích hoạt ngay...');
+                      installingWorker.postMessage('SKIP_WAITING');
+                      showToast('🚀 Đang cập nhật ứng dụng lên phiên bản mới nhất...', 'info', 3000);
+                    }
                   }
                 };
               }
