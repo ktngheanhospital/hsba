@@ -46,18 +46,10 @@ export class StorageService {
     }, 300);
   }
 
-  // Tự động dọn dẹp các mockup dữ liệu mẫu ban đầu
+  // Tự động dọn dẹp các mockup dữ liệu mẫu ban đầu (không xóa dữ liệu thật của người dùng)
   cleanMockData() {
     try {
-      const mockRecIds = ['REC-1001', 'REC-1002', 'REC-1003', 'REC-1004'];
-      const mockRepIds = ['BCRV-2026-001', 'BCRV-2026-002', 'BCRV-2026-003'];
       const legacyMockStaffIds = ['NV00', 'NV01', 'NV02', 'NV03', 'NV04', 'NV08', 'NV09', 'NV10', 'NV11', 'NV13'];
-      
-      const records = this.getRecords().filter(r => !mockRecIds.includes(r.id));
-      this.saveRecords(records);
-      
-      const reps = this.getDischargeReports().filter(r => !mockRepIds.includes(r.id));
-      this.saveDischargeReports(reps);
 
       // Chỉ lọc bỏ các tài khoản mockup cũ có tên 'Trần Thị Mai' hoặc ID rác NV00..
       const staffJson = localStorage.getItem(STORAGE_KEYS.STAFF);
@@ -84,8 +76,18 @@ export class StorageService {
         const record = supabaseService.dbToRecord(payload.new);
         const records = this.getRecords();
         const idx = records.findIndex(r => r.id === record.id);
-        if (idx !== -1) records[idx] = record;
-        else records.unshift(record);
+        if (idx !== -1) {
+          records[idx] = {
+            ...records[idx],
+            ...record,
+            lastPushSentAt: record.lastPushSentAt || records[idx].lastPushSentAt || null,
+            lastZaloSentAt: record.lastZaloSentAt || records[idx].lastZaloSentAt || null,
+            pushSentCount: Math.max(record.pushSentCount || 0, records[idx].pushSentCount || 0),
+            pushHistory: (record.pushHistory && record.pushHistory.length) ? record.pushHistory : (records[idx].pushHistory || [])
+          };
+        } else {
+          records.unshift(record);
+        }
         this.saveRecords(records);
       } else if (payload.eventType === 'DELETE') {
         let records = this.getRecords();
@@ -442,7 +444,7 @@ export class StorageService {
   addRecord(recordData) {
     const records = this.getRecords();
     const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
-    const newId = 'REC-' + (1000 + records.length + 1);
+    const newId = 'REC-' + Date.now().toString(36).toUpperCase() + '-' + Math.floor(1000 + Math.random() * 9000);
 
     const newRecord = {
       id: newId,

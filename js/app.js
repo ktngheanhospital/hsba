@@ -528,6 +528,15 @@ class App {
       }
     });
 
+    const recentDaysSelect = document.getElementById('filter-recent-days-select');
+    if (recentDaysSelect) {
+      recentDaysSelect.addEventListener('change', (e) => {
+        this.filters.recentDays = e.target.value;
+        this.currentPage = 1;
+        this.renderRecordsView();
+      });
+    }
+
     // Quick Category Filter Pills (Phong cách hình tham chiếu)
     document.querySelectorAll('.cat-pill-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -715,11 +724,15 @@ class App {
       nguoiChiDinh: '',
       trangThaiKiemDuyet: '',
       fromNgayKiem: '',
-      toNgayKiem: ''
+      toNgayKiem: '',
+      recentDays: '10'
     };
 
     const searchInput = document.getElementById('search-input');
     if (searchInput) searchInput.value = '';
+
+    const recentDaysSelect = document.getElementById('filter-recent-days-select');
+    if (recentDaysSelect) recentDaysSelect.value = '10';
 
     const inputs = [
       'filter-dept-input',
@@ -779,6 +792,18 @@ class App {
       this.initBatchDischargeEntry();
     } else if (tabId === 'settings') {
       this.renderSettingsView();
+    }
+
+    // Tự động kiểm tra và đồng bộ dữ liệu mới nhất từ Supabase khi chuyển tab
+    if (supabaseService.client) {
+      supabaseService.smartSync(storage, () => {
+        if (this.currentTab === tabId) {
+          if (tabId === 'records') this.renderRecordsView();
+          else if (tabId === 'discharge') this.renderDischargeView();
+          else if (tabId === 'dashboard') this.renderDashboardView();
+          this.updateRightPanelWidgets();
+        }
+      });
     }
 
     this.updateRightPanelWidgets();
@@ -866,16 +891,25 @@ class App {
 
     const hasKeyword = !!this.filters.keyword;
     const hasCustomDate = !!this.filters.fromNgayKiem || !!this.filters.toNgayKiem;
+    const recentDays = this.filters.recentDays || '10';
 
-    // 1. Mặc định 10 ngày gần đây nhất
-    if (!hasKeyword && !hasCustomDate) {
+    // 1. Lọc theo khoảng thời gian gần đây nếu không có tìm kiếm từ khóa hoặc chọn ngày cụ thể
+    if (!hasKeyword && !hasCustomDate && recentDays !== 'all') {
+      const days = parseInt(recentDays, 10) || 10;
       const d = new Date();
-      d.setDate(d.getDate() - 10);
-      const tenDaysAgoStr = d.toISOString().slice(0, 10);
+      d.setDate(d.getDate() - days);
+      const limitDateStr = d.toISOString().slice(0, 10);
 
       records = records.filter(r => {
-        const checkDate = r.ngayKiemHoSo || (r.ngayTao ? r.ngayTao.slice(0, 10) : '');
-        return checkDate >= tenDaysAgoStr;
+        const rawDate = r.ngayKiemHoSo || r.ngayVaoKhoa || (r.ngayTao ? r.ngayTao.slice(0, 10) : '');
+        if (!rawDate) return true; // Không bao giờ ẩn hồ sơ nếu chưa có ngày hoặc thiếu ngày
+
+        let normDate = rawDate;
+        if (/^\d{2}\/\d{2}\/\d{4}/.test(rawDate)) {
+          const parts = rawDate.split(/[\/\s]/);
+          normDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+        return normDate >= limitDateStr;
       });
     }
 

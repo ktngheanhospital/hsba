@@ -135,21 +135,24 @@ class SupabaseService {
   dbToRecord(row) {
     const pushCount = row.so_lan_gui_zalo ?? row.soLanGuiZalo ?? row.pushSentCount ?? 0;
     const lastPushAt = row.thoi_gian_gui_zalo_gan_nhat || row.thoiGianGuiZaloGanNhat || row.lastPushSentAt || null;
+    const mucDo = row.muc_do_loi || row.mucDoLoi || row.muc_do_canh_bao || row.mucDoCanhBao || row.level || 'Nhắc nhở';
+    const rawId = row.id ? String(row.id) : ('REC-' + Date.now().toString(36).toUpperCase());
+
     return {
-      id: row.id,
-      maKCB: row.ma_kcb || row.maKCB || '',
-      tenBenhNhan: row.ten_benh_nhan || row.tenBenhNhan || '',
-      khoaPhong: row.khoa_phong || row.khoaPhong || '',
-      nguoiChiDinh: row.nguoi_chi_dinh || row.nguoiChiDinh || '',
-      ngayVaoKhoa: row.ngay_vao_khoa || row.ngayVaoKhoa || '',
-      ngayKiemHoSo: row.ngay_kiem_ho_so || row.ngayKiemHoSo || '',
-      thoiGianChiDinhYL: row.thoi_gian_chi_dinh_yl || row.thoiGianChiDinhYL || '',
-      dienGiaiLoi: row.dien_giai_loi || row.dienGiaiLoi || '',
-      mucDoLoi: row.muc_do_loi || row.mucDoLoi || 'Nhắc nhở',
-      mucDoCanhBao: row.muc_do_loi || row.mucDoLoi || 'Nhắc nhở',
-      trangThaiKiemDuyet: row.muc_do_loi || row.mucDoLoi || 'Nhắc nhở',
-      trangThaiLoi: row.trang_thai_loi || row.trangThaiLoi || 'CHƯA SỬA',
-      yKienNguoiSua: row.y_kien_nguoi_sua || row.yKienNguoiSua || '',
+      id: rawId,
+      maKCB: row.ma_kcb || row.maKCB || row.makcb || row.ma_benh_an || '',
+      tenBenhNhan: row.ten_benh_nhan || row.tenBenhNhan || row.tenbenhnhan || row.ho_ten || row.hoten || '',
+      khoaPhong: row.khoa_phong || row.khoaPhong || row.khoaphong || row.khoa || '',
+      nguoiChiDinh: row.nguoi_chi_dinh || row.nguoiChiDinh || row.nguoichidinh || row.bac_si || row.bacsi || '',
+      ngayVaoKhoa: row.ngay_vao_khoa || row.ngayVaoKhoa || row.ngayvaokhoa || '',
+      ngayKiemHoSo: row.ngay_kiem_ho_so || row.ngayKiemHoSo || row.ngaykiemhoso || row.ngay_kiem || '',
+      thoiGianChiDinhYL: row.thoi_gian_chi_dinh_yl || row.thoiGianChiDinhYL || row.thoigianchidinhyl || row.thoi_gian_yl || '',
+      dienGiaiLoi: row.dien_giai_loi || row.dienGiaiLoi || row.diengiailoi || row.noi_dung_loi || row.ghi_chu || '',
+      mucDoLoi: mucDo,
+      mucDoCanhBao: mucDo,
+      trangThaiKiemDuyet: mucDo,
+      trangThaiLoi: row.trang_thai_loi || row.trangThaiLoi || row.trangthailoi || row.trang_thai || 'CHƯA SỬA',
+      yKienNguoiSua: row.y_kien_nguoi_sua || row.yKienNguoiSua || row.ykiennguoisua || row.y_kien || '',
       nguoiKiemTra: row.nguoi_kiem_tra || row.nguoiKiemTra || '',
       pushSentCount: pushCount,
       lastPushSentAt: lastPushAt,
@@ -183,13 +186,13 @@ class SupabaseService {
 
   dbToDischarge(row) {
     return {
-      id: row.id,
-      ngayBaoCao: row.ngay_bao_cao || row.ngayBaoCao || '',
-      ngayRaVien: row.ngay_ra_vien || row.ngayRaVien || '',
-      maKCB: row.ma_kcb || row.maKCB || '',
-      tenBenhNhan: row.ten_benh_nhan || row.tenBenhNhan || '',
-      tenBacSi: row.ten_bac_si || row.tenBacSi || '',
-      phong: row.phong || '',
+      id: row.id ? String(row.id) : ('BCRV-' + Date.now().toString(36).toUpperCase()),
+      ngayBaoCao: row.ngay_bao_cao || row.ngayBaoCao || row.ngaybaocao || '',
+      ngayRaVien: row.ngay_ra_vien || row.ngayRaVien || row.ngayravien || '',
+      maKCB: row.ma_kcb || row.maKCB || row.makcb || row.ma_benh_an || '',
+      tenBenhNhan: row.ten_benh_nhan || row.tenBenhNhan || row.tenbenhnhan || '',
+      tenBacSi: row.ten_bac_si || row.tenBacSi || row.tenbacsi || row.bac_si || '',
+      phong: row.phong || row.khoa || row.khoa_phong || row.khoaPhong || '',
       nguoiBaoCao: row.nguoi_bao_cao || row.nguoiBaoCao || '',
       kiemDuoc: row.kiem_duoc || row.kiemDuoc || { status: 'CO_LOI', note: '' },
       kiemKeToanBH: row.kiem_ketoan_bh || row.kiemKeToanBH || { status: 'CO_LOI', note: '' },
@@ -258,10 +261,13 @@ class SupabaseService {
   async fetchRecords() {
     if (!this.client) return null;
     try {
-      const { data, error } = await this.client.from('records').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      const mockRecIds = ['REC-1001', 'REC-1002', 'REC-1003', 'REC-1004'];
-      return (data || []).map(r => this.dbToRecord(r)).filter(r => !mockRecIds.includes(r.id));
+      // Fetch without forcing order on created_at to avoid column not found error
+      let { data, error } = await this.client.from('records').select('*');
+      if (error) {
+        console.warn('Lỗi khi fetch records từ Supabase:', error);
+        return null;
+      }
+      return (data || []).map(r => this.dbToRecord(r));
     } catch (e) {
       console.warn('Lỗi khi fetch records từ Supabase:', e);
       return null;
@@ -297,10 +303,12 @@ class SupabaseService {
   async fetchDischargeReports() {
     if (!this.client) return null;
     try {
-      const { data, error } = await this.client.from('discharge_reports').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      const mockRepIds = ['BCRV-2026-001', 'BCRV-2026-002', 'BCRV-2026-003'];
-      return (data || []).map(r => this.dbToDischarge(r)).filter(r => !mockRepIds.includes(r.id));
+      let { data, error } = await this.client.from('discharge_reports').select('*');
+      if (error) {
+        console.warn('Lỗi khi fetch discharge_reports từ Supabase:', error);
+        return null;
+      }
+      return (data || []).map(r => this.dbToDischarge(r));
     } catch (e) {
       console.warn('Lỗi khi fetch discharge_reports từ Supabase:', e);
       return null;
@@ -536,7 +544,14 @@ class SupabaseService {
             if (idx === -1) {
               mergedRecords.unshift(cr);
             } else {
-              mergedRecords[idx] = cr;
+              mergedRecords[idx] = {
+                ...mergedRecords[idx],
+                ...cr,
+                lastPushSentAt: cr.lastPushSentAt || mergedRecords[idx].lastPushSentAt || null,
+                lastZaloSentAt: cr.lastZaloSentAt || mergedRecords[idx].lastZaloSentAt || null,
+                pushSentCount: Math.max(cr.pushSentCount || 0, mergedRecords[idx].pushSentCount || 0),
+                pushHistory: (cr.pushHistory && cr.pushHistory.length) ? cr.pushHistory : (mergedRecords[idx].pushHistory || [])
+              };
             }
           });
           storageService.saveRecords(mergedRecords);

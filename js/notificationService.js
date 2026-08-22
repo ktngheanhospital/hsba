@@ -21,7 +21,8 @@ export const DEFAULT_PUSH_CONFIG = {
 const PUSH_STORAGE_KEYS = {
   CONFIG: 'theo_doi_hsba_push_config',
   INBOX: 'theo_doi_hsba_push_notifications',
-  LOGS: 'theo_doi_hsba_push_logs'
+  LOGS: 'theo_doi_hsba_push_logs',
+  TRACKER: 'theo_doi_hsba_push_last_sent_tracker'
 };
 
 class NotificationService {
@@ -306,6 +307,7 @@ class NotificationService {
     };
 
     storage.updateRecord(record.id, updates);
+    this.recordPushSentTimestamp(record.id, now.getTime());
     this.notifyListeners();
 
     // 6. Hiển thị Slide Banner trong ứng dụng nếu người dùng đang mở app
@@ -607,19 +609,95 @@ class NotificationService {
     this.sendTestPush();
   }
 
-  // Hàm phân tích thời gian an toàn đa định dạng (ISO, Local String, Timestamp)
+  // Quản lý Tracker lưu mốc thời gian bắn thông báo cục bộ độc lập (tránh bị Cloud Sync ghi đè)
+  getSentTracker() {
+    try {
+      const raw = localStorage.getItem(PUSH_STORAGE_KEYS.TRACKER);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  recordPushSentTimestamp(recordId, timestampMs) {
+    if (!recordId) return;
+    try {
+      const tracker = this.getSentTracker();
+      tracker[recordId] = Number(timestampMs) || Date.now();
+      localStorage.setItem(PUSH_STORAGE_KEYS.TRACKER, JSON.stringify(tracker));
+    } catch (e) {}
+  }
+
+  // Lấy thời điểm gửi push gần nhất chính xác tuyệt đối
+  getLastSentTimestamp(record) {
+    if (!record || !record.id) return null;
+    let latestTs = null;
+
+    // 1. Kiểm tra từ Tracker cục bộ độc lập
+    const tracker = this.getSentTracker();
+    if (tracker[record.id] && typeof tracker[record.id] === 'number') {
+      latestTs = tracker[record.id];
+    }
+
+    // 2. Kiểm tra từ thuộc tính của record
+    const rawSent = record.lastPushSentAt || record.thoiGianGuiZaloGanNhat || record.lastZaloSentAt;
+    const parsedSent = this.parseTimestamp(rawSent);
+    if (parsedSent && (!latestTs || parsedSent > latestTs)) {
+      latestTs = parsedSent;
+    }
+
+    // 3. Kiểm tra từ Nhật ký gửi thông báo toàn hệ thống
+    const logs = this.getDeliveryLogs();
+    const matchedLog = logs.find(l => l.recordId === record.id);
+    if (matchedLog && matchedLog.timestamp) {
+      const logTs = this.parseTimestamp(matchedLog.timestamp);
+      if (logTs && (!latestTs || logTs > latestTs)) {
+        latestTs = logTs;
+      }
+    }
+
+    // Đồng bộ lại vào tracker nếu tìm thấy mốc mới hơn
+    if (latestTs && tracker[record.id] !== latestTs) {
+      this.recordPushSentTimestamp(record.id, latestTs);
+    }
+
+    return latestTs;
+  }
+
+  // Hàm phân tích thời gian an toàn đa định dạng (ISO, Local String, Timestamp, DD/MM/YYYY)
   parseTimestamp(val) {
     if (!val) return null;
-    if (typeof val === 'number') return val;
+    if (typeof val === 'number') return isNaN(val) ? null : val;
     if (typeof val === 'string') {
       const trimmed = val.trim();
-      // Thử parse trực tiếp ISO hoặc date string
+      if (!trimmed) return null;
+
+      // Chuỗi số timestamp
+      if (/^\d{10,13}$/.test(trimmed)) {
+        const num = Number(trimmed);
+        return trimmed.length === 10 ? num * 1000 : num;
+      }
+
+      // Parse trực tiếp chuẩn ISO hoặc chuỗi ngày
       let parsed = Date.parse(trimmed);
       if (!isNaN(parsed)) return parsed;
-      // Thử chuẩn hóa định dạng 'YYYY-MM-DD HH:mm'
+
+      // Chuẩn hóa 'YYYY-MM-DD HH:mm'
       const isoStandard = trimmed.replace(' ', 'T');
       parsed = Date.parse(isoStandard);
       if (!isNaN(parsed)) return parsed;
+
+      // Hỗ trợ định dạng Việt Nam: 'DD/MM/YYYY' hoặc 'DD/MM/YYYY HH:mm'
+      if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(trimmed)) {
+        const parts = trimmed.split(/[\/\s:]+/);
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        const hour = parts[3] ? parseInt(parts[3], 10) : 0;
+        const min = parts[4] ? parseInt(parts[4], 10) : 0;
+        const d = new Date(year, month, day, hour, min);
+        if (!isNaN(d.getTime())) return d.getTime();
+      }
     }
     return null;
   }
@@ -639,10 +717,10 @@ class NotificationService {
       this.checkAndDispatchAutoReminders(false);
     }, 60 * 1000);
 
-    // Quét nhẹ nhàng sau khi mở app (không ép buộc gửi nếu chưa tới hạn)
+    // Quét nhẹ nhàng sau khi mở app 10 giây (không ép buộc gửi nếu chưa tới hạn)
     setTimeout(() => {
       this.checkAndDispatchAutoReminders(false);
-    }, 5000);
+    }, 10000);
   }
 
   // Quét các lỗi chưa hoàn thành và kiểm tra xem đã qua chu kỳ cần nhắc chưa
@@ -651,7 +729,8 @@ class NotificationService {
     if (!config.enabled || (!config.autoReminder && !forceAll)) return 0;
 
     const intervalHours = parseFloat(config.reminderIntervalHours) || 2;
-    const intervalMs = Math.max(1, intervalHours) * 60 * 60 * 1000;
+    // Cho phép khoảng thời gian linh hoạt (ví dụ: 0.25h = 15p, 0.5h = 30p, 1h, 2h...), tối thiểu 5 phút (300.000 ms)
+    const intervalMs = Math.max(5 * 60 * 1000, intervalHours * 60 * 60 * 1000);
     const now = Date.now();
     const records = storage.getRecords();
 
@@ -662,7 +741,7 @@ class NotificationService {
       const isResolved = record.trangThaiLoi === 'ĐÃ XONG' || record.trangThaiKiemDuyet === 'ĐÃ SỬA' || record.chotRaVien;
       if (isResolved) return;
 
-      // 2. Bỏ qua hồ sơ không có bác sĩ/nhân viên chỉ định
+      // 2. Bỏ qua hồ sơ không có người chỉ định
       if (!record.nguoiChiDinh) return;
 
       let needSend = false;
@@ -670,29 +749,28 @@ class NotificationService {
       if (forceAll) {
         needSend = true;
       } else {
-        // Tìm mốc thời gian gần nhất: lần gửi push gần nhất, lần gửi zalo gần nhất, hoặc lúc tạo bản ghi
-        const lastSentRaw = record.lastPushSentAt || record.lastZaloSentAt;
-        const lastSentTime = this.parseTimestamp(lastSentRaw);
+        const lastSentTime = this.getLastSentTimestamp(record);
 
         if (lastSentTime) {
           const elapsed = now - lastSentTime;
+          // Chỉ gửi khi khoảng thời gian trôi qua THỰC SỰ LỚN HƠN HOẶC BẰNG khoảng thời gian đã cài đặt (ví dụ: 2 giờ)
           if (elapsed >= intervalMs) {
             needSend = true;
           }
         } else {
-          // Chưa từng gửi push: kiểm tra thời điểm tạo lỗi
-          const createdTime = this.parseTimestamp(record.ngayTao);
+          // Chưa từng gửi: kiểm tra thời điểm tạo lỗi hoặc kiểm hồ sơ
+          const createdTime = this.parseTimestamp(record.ngayTao) || this.parseTimestamp(record.ngayKiemHoSo);
           if (createdTime) {
             const elapsedSinceCreation = now - createdTime;
             if (elapsedSinceCreation >= intervalMs) {
               needSend = true;
             } else {
-              // Vừa mới tạo chưa đủ thời gian chu kỳ: cập nhật lastPushSentAt để không bắn nhầm
-              storage.updateRecord(record.id, { lastPushSentAt: new Date(createdTime).toISOString() });
+              // Chưa đến hạn: lưu mốc tạo vào tracker để đợi đủ chu kỳ
+              this.recordPushSentTimestamp(record.id, createdTime);
             }
           } else {
-            // Không có thông tin ngày tạo: gán mốc hiện tại để bắt đầu tính chu kỳ từ bây giờ
-            storage.updateRecord(record.id, { lastPushSentAt: new Date().toISOString() });
+            // Không rõ ngày tạo: gán mốc hiện tại để bắt đầu tính chu kỳ từ bây giờ (tránh bắn thông báo liên tục)
+            this.recordPushSentTimestamp(record.id, now);
           }
         }
       }
