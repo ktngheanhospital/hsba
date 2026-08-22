@@ -150,4 +150,9 @@ fs.writeFileSync(path.join(iconsDir, 'icon-maskable-512.png'), pngMaskable512);
 const pngApple = createPNG(180, 180, (x, y, w, h) => drawHospitalIcon(x, y, w, h, false));
 fs.writeFileSync(path.join(iconsDir, 'apple-touch-icon.png'), pngApple);
 
-console.log('Successfully generated all PWA PNG icons in /icons!');
+// Generate 64x64 Favicon
+const pngFavicon = createPNG(64, 64, (x, y, w, h) => drawHospitalIcon(x, y, w, h, false));
+fs.writeFileSync(path.resolve('favicon.ico'), pngFavicon);
+fs.writeFileSync(path.join(iconsDir, 'favicon.png'), pngFavicon);
+
+console.log('Successfully generated all PWA PNG icons and favicons!');

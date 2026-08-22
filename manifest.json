@@ -1,9 +1,9 @@
 {
-  "id": "/?source=pwa",
+  "id": "/",
   "name": "Theo dõi HSBA - BV HNĐK Nghệ An",
   "short_name": "Theo dõi HSBA",
   "description": "Hệ thống Quản lý và Theo dõi HSBA Bệnh Viện Hữu Nghị Đa Khoa Nghệ An - Giai đoạn 2",
-  "start_url": "/?source=pwa",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui", "window-controls-overlay"],
@@ -13,6 +13,7 @@
   "lang": "vi",
   "dir": "ltr",
   "categories": ["medical", "productivity", "utilities"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icons/icon-192.png",

@@ -330,10 +330,19 @@ class NotificationService {
         document.body.appendChild(container);
       }
 
+      const rawLevel = (item.mucDoCanhBao || '').toLowerCase();
+      let levelClass = 'banner-level-info';
+      let badgeIcon = '🔔';
+      if (rawLevel.includes('báo động') || rawLevel.includes('alarm') || rawLevel.includes('khẩn cấp')) {
+        levelClass = 'banner-level-alarm';
+        badgeIcon = '🚨';
+      } else if (rawLevel.includes('kiểm tra') || rawLevel.includes('cảnh báo') || rawLevel.includes('warning')) {
+        levelClass = 'banner-level-warning';
+        badgeIcon = '⚠️';
+      }
+
       const banner = document.createElement('div');
-      banner.className = `push-inapp-banner banner-level-${(item.mucDoCanhBao || 'nhac-nho').toLowerCase().replace(/\s+/g, '-')}`;
-      
-      const badgeIcon = item.mucDoCanhBao === 'Báo động' ? '🚨' : (item.mucDoCanhBao === 'Yêu cầu kiểm tra' ? '⚠️' : '🔔');
+      banner.className = `push-inapp-banner ${levelClass}`;
       
       banner.innerHTML = `
         <div class="banner-icon-badge">${badgeIcon}</div>

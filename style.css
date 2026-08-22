@@ -771,15 +771,22 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.22);
 }
 
+.push-inapp-banner.banner-level-alarm,
 .push-inapp-banner.banner-level-báo-động,
 .push-inapp-banner.banner-level-khẩn-cấp {
-  border-left-color: #ef4444;
-  background: #fffafa;
+  border-left-color: #ef4444 !important;
+  background: #fffafa !important;
 }
 
+.push-inapp-banner.banner-level-warning,
 .push-inapp-banner.banner-level-yêu-cầu-kiểm-tra {
-  border-left-color: #9333ea;
-  background: #faf5ff;
+  border-left-color: #9333ea !important;
+  background: #faf5ff !important;
+}
+
+.push-inapp-banner.banner-level-info {
+  border-left-color: var(--primary) !important;
+  background: #ffffff !important;
 }
 
 .banner-icon-badge {
