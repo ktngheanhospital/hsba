@@ -92,10 +92,15 @@ class App {
     this.chartInstance = null;
     this.isChartTableExpanded = false;
 
+    // PWA Install State
+    this.deferredInstallPrompt = null;
+    this.isPWAInstalled = false;
+
     this.init();
   }
 
   init() {
+    this.initPWA();
     this.bindEvents();
     this.populateFilterSuggestions();
     this.renderNotificationCenter();
@@ -2949,7 +2954,7 @@ class App {
 
     // Hiển thị đúng phân khu subtab đang chọn
     const currentSub = this.settingsSubTab || 'zalo';
-    const allSubs = ['zalo', 'permissions', 'departments', 'staff', 'supabase', 'backup'];
+    const allSubs = ['zalo', 'pwa', 'permissions', 'departments', 'staff', 'supabase', 'backup'];
     allSubs.forEach(s => {
       const el = document.getElementById(`settings-sec-${s}`);
       if (el) el.style.display = s === currentSub ? 'block' : 'none';
@@ -2957,6 +2962,10 @@ class App {
     document.querySelectorAll('.subnav-pill-btn, .settings-subtab-btn, [data-subtab]').forEach(btn => {
       btn.classList.toggle('active', btn.getAttribute('data-subtab') === currentSub);
     });
+
+    if (currentSub === 'pwa') {
+      this.updatePWAInstallUI();
+    }
   }
 
   bindSettingsEvents() {
@@ -2969,13 +2978,14 @@ class App {
         subTabButtons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
 
-        const allSubs = ['zalo', 'permissions', 'departments', 'staff', 'supabase', 'backup'];
+        const allSubs = ['zalo', 'pwa', 'permissions', 'departments', 'staff', 'supabase', 'backup'];
         allSubs.forEach(s => {
           const sec = document.getElementById(`settings-sec-${s}`) || (s === 'departments' ? document.getElementById('settings-sec-depts') : null);
           if (sec) sec.style.display = s === subTab ? 'block' : 'none';
         });
 
         // Tự động re-render dữ liệu tương ứng
+        if (subTab === 'pwa') this.updatePWAInstallUI();
         if (subTab === 'departments') this.renderDepartmentSettings();
         if (subTab === 'staff') this.renderStaffSettings();
         if (subTab === 'permissions') this.renderPermissionsSettings();
@@ -3555,6 +3565,231 @@ class App {
     storage.updateDischargeReport(reportId, updates);
     showToast(newGate === 'CO' ? '🟢 Đã chốt ĐỒNG Ý thông cổng!' : '🔴 Đã chuyển về CHƯA thông cổng', 'success');
     this.refreshAllViews();
+  }
+
+  // ==================== PWA PROGRESSIVE WEB APP LIFECYCLE ====================
+  // Khởi tạo và thiết lập PWA Service Worker + Web App Install Prompt
+  initPWA() {
+    // 1. Đăng ký Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js', { scope: '/' })
+          .then((registration) => {
+            console.log('✅ [PWA] Service Worker đăng ký thành công với scope:', registration.scope);
+
+            // Lắng nghe cập nhật Service Worker mới
+            registration.onupdatefound = () => {
+              const installingWorker = registration.installing;
+              if (installingWorker) {
+                installingWorker.onstatechange = () => {
+                  if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    console.log('🔄 [PWA] Đã tải phiên bản mới của ứng dụng');
+                    showToast('Có bản cập nhật mới của ứng dụng Theo dõi HSBA!', 'info', 5000);
+                  }
+                };
+              }
+            };
+          })
+          .catch((error) => {
+            console.error('❌ [PWA] Lỗi khi đăng ký Service Worker:', error);
+          });
+      });
+    }
+
+    // 2. Kiểm tra trạng thái Standalone (App Mode)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    if (isStandalone) {
+      this.isPWAInstalled = true;
+    }
+
+    // 3. Bắt sự kiện beforeinstallprompt của trình duyệt (Android Chrome, Edge, Windows...)
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault(); // Ngăn pop-up mặc định của trình duyệt để điều khiển mượt mà
+      this.deferredInstallPrompt = e;
+      window.deferredInstallPrompt = e;
+      console.log('📱 [PWA] Sự kiện beforeinstallprompt đã sẵn sàng');
+      this.updatePWAInstallUI();
+    });
+
+    // 4. Bắt sự kiện appinstalled khi người dùng đã cài đặt xong
+    window.addEventListener('appinstalled', (e) => {
+      this.isPWAInstalled = true;
+      this.deferredInstallPrompt = null;
+      window.deferredInstallPrompt = null;
+      console.log('🎉 [PWA] Ứng dụng đã được cài đặt thành công!');
+      showToast('🎉 Đã cài đặt ứng dụng Theo dõi HSBA thành công trên thiết bị!', 'success', 5000);
+      this.updatePWAInstallUI();
+    });
+
+    // 5. Cập nhật giao diện cài đặt PWA
+    this.updatePWAInstallUI();
+
+    // 6. Gán sự kiện click cho các nút cài đặt PWA
+    this.bindPWAEvents();
+  }
+
+  // Cập nhật trạng thái hiển thị các nút và banner cài đặt PWA
+  updatePWAInstallUI() {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isMobile = window.innerWidth <= 768 || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const dismissedBanner = sessionStorage.getItem('pwa_banner_dismissed') === 'true';
+
+    // Header Button
+    const headerBtn = document.getElementById('btn-header-pwa-install');
+    if (headerBtn) {
+      if (isStandalone) {
+        headerBtn.innerHTML = '<span class="pwa-icon">✅</span><span class="pwa-text">Đang chạy App</span>';
+        headerBtn.classList.add('btn-pwa-active');
+        headerBtn.title = 'Ứng dụng đang mở ở chế độ App độc lập';
+      } else {
+        headerBtn.innerHTML = '<span class="pwa-icon">📲</span><span class="pwa-text">Cài App</span>';
+        headerBtn.classList.remove('btn-pwa-active');
+        headerBtn.title = 'Cài đặt App lên điện thoại / máy tính';
+      }
+    }
+
+    // Mobile Banner
+    const mobileBanner = document.getElementById('mobile-pwa-banner');
+    if (mobileBanner) {
+      if (isMobile && !isStandalone && !dismissedBanner) {
+        mobileBanner.style.display = 'flex';
+      } else {
+        mobileBanner.style.display = 'none';
+      }
+    }
+
+    // Settings Pane Status
+    const statusBadge = document.getElementById('pwa-status-badge');
+    const statusText = document.getElementById('pwa-status-text');
+    const settingsInstallBtn = document.getElementById('btn-settings-install-pwa');
+
+    if (statusBadge && statusText) {
+      if (isStandalone) {
+        statusBadge.style.background = '#f0fdf4';
+        statusBadge.style.color = '#15803d';
+        statusBadge.style.borderColor = '#bbf7d0';
+        statusText.textContent = '🚀 Đang chạy trong App (PWA)';
+        if (settingsInstallBtn) {
+          settingsInstallBtn.innerHTML = '<span>✅ Ứng dụng đã được cài đặt</span>';
+          settingsInstallBtn.classList.remove('btn-primary');
+          settingsInstallBtn.classList.add('btn-secondary');
+        }
+      } else if (this.deferredInstallPrompt) {
+        statusBadge.style.background = '#ecfdf5';
+        statusBadge.style.color = '#047857';
+        statusBadge.style.borderColor = '#a7f3d0';
+        statusText.textContent = '📲 Sẵn sàng cài đặt 1-chạm';
+        if (settingsInstallBtn) {
+          settingsInstallBtn.innerHTML = '<span>📲 Cài đặt ngay lên thiết bị</span>';
+          settingsInstallBtn.classList.add('btn-primary');
+          settingsInstallBtn.classList.remove('btn-secondary');
+        }
+      } else if (isIOS) {
+        statusBadge.style.background = '#eff6ff';
+        statusBadge.style.color = '#1d4ed8';
+        statusBadge.style.borderColor = '#bfdbfe';
+        statusText.textContent = '🍎 Hỗ trợ Safari iOS';
+      } else {
+        statusBadge.style.background = '#f8fafc';
+        statusBadge.style.color = '#475569';
+        statusBadge.style.borderColor = '#e2e8f0';
+        statusText.textContent = '🌐 Trình duyệt Web';
+      }
+    }
+  }
+
+  // Gán sự kiện click cho các nút liên quan đến PWA
+  bindPWAEvents() {
+    // Header Install button
+    const headerBtn = document.getElementById('btn-header-pwa-install');
+    if (headerBtn) {
+      headerBtn.onclick = () => this.triggerPWAInstall();
+    }
+
+    // Mobile Banner Install button
+    const bannerInstallBtn = document.getElementById('btn-install-pwa-banner');
+    if (bannerInstallBtn) {
+      bannerInstallBtn.onclick = () => this.triggerPWAInstall();
+    }
+
+    // Mobile Banner Dismiss button
+    const bannerDismissBtn = document.getElementById('btn-dismiss-pwa-banner');
+    if (bannerDismissBtn) {
+      bannerDismissBtn.onclick = () => {
+        const banner = document.getElementById('mobile-pwa-banner');
+        if (banner) banner.style.display = 'none';
+        sessionStorage.setItem('pwa_banner_dismissed', 'true');
+      };
+    }
+
+    // Settings Install button
+    const settingsInstallBtn = document.getElementById('btn-settings-install-pwa');
+    if (settingsInstallBtn) {
+      settingsInstallBtn.onclick = () => this.triggerPWAInstall();
+    }
+
+    // Open detail guide modal button in Settings
+    const openGuideModalBtn = document.getElementById('btn-open-install-guide-modal');
+    if (openGuideModalBtn) {
+      openGuideModalBtn.onclick = () => this.modalController.openPWAInstallGuideModal();
+    }
+
+    // Clear Cache & Refresh Service Worker button
+    const updateCacheBtn = document.getElementById('btn-update-pwa-cache');
+    if (updateCacheBtn) {
+      updateCacheBtn.onclick = async () => {
+        try {
+          if ('caches' in window) {
+            const cacheNames = await caches.keys();
+            await Promise.all(cacheNames.map(name => caches.delete(name)));
+          }
+          if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (const reg of registrations) {
+              await reg.update();
+            }
+          }
+          showToast('✅ Đã làm mới bộ nhớ đệm và nạp dữ liệu PWA mới nhất!', 'success');
+          setTimeout(() => {
+            window.location.reload();
+          }, 800);
+        } catch (err) {
+          console.error(err);
+          showToast('Lỗi khi làm mới cache. Tự động tải lại...', 'info');
+          window.location.reload();
+        }
+      };
+    }
+  }
+
+  // Kích hoạt tiến trình cài đặt PWA hoặc mở Modal hướng dẫn
+  async triggerPWAInstall() {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    if (isStandalone) {
+      showToast('Ứng dụng Theo dõi HSBA đang mở ở chế độ App độc lập!', 'info');
+      return;
+    }
+
+    if (this.deferredInstallPrompt) {
+      try {
+        this.deferredInstallPrompt.prompt();
+        const choiceResult = await this.deferredInstallPrompt.userChoice;
+        if (choiceResult.outcome === 'accepted') {
+          showToast('Đang cài đặt ứng dụng Theo dõi HSBA...', 'info');
+        } else {
+          showToast('Bạn đã hủy cài đặt ứng dụng', 'warning');
+        }
+        this.deferredInstallPrompt = null;
+        this.updatePWAInstallUI();
+      } catch (err) {
+        console.error('Lỗi khi kích hoạt install prompt:', err);
+        this.modalController.openPWAInstallGuideModal();
+      }
+    } else {
+      // Mở modal hướng dẫn chi tiết theo hệ điều hành (iOS hoặc Android)
+      this.modalController.openPWAInstallGuideModal();
+    }
   }
 }
 

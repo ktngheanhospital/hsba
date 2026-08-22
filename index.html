@@ -7,7 +7,26 @@
   
   <meta name="description" content="Hệ thống rà soát hồ sơ bệnh án, báo cáo và chốt ra viện các khâu chuyên môn - BV Hữu Nghị Đa Khoa Nghệ An - Giai đoạn 2." />
   <meta name="theme-color" content="#0F766E" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2224%22 fill=%22%230F766E%22/><path d=%22M50 24 v52 M24 50 h52%22 stroke=%22white%22 stroke-width=%2212%22 stroke-linecap=%22round%22/></svg>">
+  
+  <!-- Web App Manifest (PWA) -->
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- iOS / Safari Web App Meta -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Theo dõi HSBA" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="application-name" content="Theo dõi HSBA" />
+  <meta name="msapplication-TileColor" content="#0F766E" />
+  <meta name="msapplication-TileImage" content="icons/icon-192.png" />
+
+  <!-- App Icons -->
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
+  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png" />
 
   <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono (Modern, Youthful, Ultra-Legible) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -200,6 +219,19 @@
     <!-- 2. MAIN CONTENT VIEWPORT (FULL-WIDTH EXPANSIVE CANVAS) -->
     <main class="main-body-content">
       <div class="app-container">
+
+        <!-- Mobile Smart PWA Install Banner -->
+        <div class="mobile-pwa-banner" id="mobile-pwa-banner" style="display: none;">
+          <div class="pwa-banner-icon">🏥</div>
+          <div class="pwa-banner-content">
+            <strong class="pwa-banner-title">Cài đặt App HSBA trên Điện thoại</strong>
+            <span class="pwa-banner-desc">Mở nhanh tức thì, hoạt động mượt mà và nhận chuông cảnh báo lỗi hồ sơ bệnh án</span>
+          </div>
+          <div class="pwa-banner-actions">
+            <button type="button" class="btn btn-primary btn-xs" id="btn-install-pwa-banner">Cài ngay</button>
+            <button type="button" class="btn-close-pwa-banner" id="btn-dismiss-pwa-banner" title="Đóng thông báo">&times;</button>
+          </div>
+        </div>
 
         <!-- ==================== VIEW 1: RÀ SOÁT LỖI (RECORDS) ==================== -->
         <section id="view-records" class="view-section">
@@ -860,6 +892,7 @@
           <div id="settings-authorized-container">
             <div class="subnav-pill-carousel">
               <button class="subnav-pill-btn active" data-subtab="zalo">🔔 Thông Báo Đẩy (Push)</button>
+              <button class="subnav-pill-btn" data-subtab="pwa">📱 Cài đặt App (PWA)</button>
               <button class="subnav-pill-btn" data-subtab="permissions">🔒 Phân quyền Chỉnh sửa Cột</button>
               <button class="subnav-pill-btn" data-subtab="departments">🏥 Danh mục Khoa/Phòng</button>
               <button class="subnav-pill-btn" data-subtab="staff">👨‍⚕️ Profile Nhân viên</button>
@@ -1007,6 +1040,123 @@
                     <tbody id="settings-zalo-logs-body"></tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+
+            <!-- Subtab PWA: Mobile App Installation & Offline Engine -->
+            <div id="settings-sec-pwa" class="settings-pane" style="display: none;">
+              <div class="dashboard-details-grid">
+                
+                <!-- Main PWA Installation Status Card -->
+                <div class="soft-card-panel">
+                  <div class="panel-header-strip flex-between">
+                    <h4 class="panel-header-title text-primary">📱 Cài Đặt Ứng Dụng PWA Trên Điện Thoại & Máy Tính</h4>
+                    <span class="badge-tag" id="pwa-status-badge" style="background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;">
+                      <span class="badge-dot dot-info"></span>
+                      <span id="pwa-status-text">Đang kiểm tra...</span>
+                    </span>
+                  </div>
+                  <div class="panel-body-area">
+                    <p class="text-body-sm text-muted" style="line-height: 1.6; margin-bottom: 16px;">
+                      Cài đặt ứng dụng <strong>Theo dõi HSBA</strong> trực tiếp lên màn hình chính của điện thoại (Android / iOS iPhone) hoặc máy tính (Windows / macOS). Ứng dụng hoạt động như App gốc với giao diện toàn màn hình, tốc độ phản hồi nhanh và nhận chuông cảnh báo y tế tức thời.
+                    </p>
+
+                    <!-- Interactive Action Box -->
+                    <div class="pwa-install-action-box">
+                      <div class="pwa-action-left">
+                        <div class="pwa-app-preview-icon">🏥</div>
+                        <div>
+                          <strong style="display: block; font-size: 1.02rem; color: var(--teal-900);">Theo dõi HSBA - BV HNĐK Nghệ An</strong>
+                          <span style="font-size: 0.8rem; color: var(--slate-500);">Phiên bản 5.0.0 · Progressive Web App (PWA)</span>
+                        </div>
+                      </div>
+                      <div class="pwa-action-right">
+                        <button type="button" class="btn btn-primary" id="btn-settings-install-pwa">
+                          <span>📲 Cài đặt ngay lên thiết bị</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- PWA Technical Indicators -->
+                    <div class="pwa-features-grid" style="margin-top: 18px;">
+                      <div class="pwa-feature-item">
+                        <span class="pwa-feat-icon">⚡</span>
+                        <div>
+                          <strong>Giao diện Toàn màn hình</strong>
+                          <p>Ẩn thanh địa chỉ trình duyệt, tối ưu diện tích hiển thị hồ sơ</p>
+                        </div>
+                      </div>
+                      <div class="pwa-feature-item">
+                        <span class="pwa-feat-icon">🔔</span>
+                        <div>
+                          <strong>Chuông & Thông báo đẩy</strong>
+                          <p>Bắn thông báo cảnh báo lỗi HSBA tức thời tới nhân viên</p>
+                        </div>
+                      </div>
+                      <div class="pwa-feature-item">
+                        <span class="pwa-feat-icon">💾</span>
+                        <div>
+                          <strong>Bộ nhớ đệm Offline</strong>
+                          <p>Service Worker lưu trữ cache, mở app cực nhanh không cần load lại</p>
+                        </div>
+                      </div>
+                      <div class="pwa-feature-item">
+                        <span class="pwa-feat-icon">🔄</span>
+                        <div>
+                          <strong>Tự động đồng bộ Supabase</strong>
+                          <p>Đồng bộ 2 chiều dữ liệu theo thời gian thực giữa máy tính & điện thoại</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="form-actions-row" style="margin-top: 20px; padding-top: 14px; border-top: 1px dashed var(--border-soft);">
+                      <button type="button" class="btn btn-secondary btn-sm" id="btn-update-pwa-cache">
+                        <span>🔄 Làm mới Cache & Cập nhật phiên bản</span>
+                      </button>
+                      <button type="button" class="btn btn-outline btn-sm" id="btn-open-install-guide-modal">
+                        <span>📖 Xem hướng dẫn chi tiết theo dòng máy</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Step-by-Step Instructions by OS Card -->
+                <div class="soft-card-panel">
+                  <div class="panel-header-strip">
+                    <h4 class="panel-header-title">Hướng Dẫn Cài Đặt Chi Tiết Theo Thiết Bị</h4>
+                  </div>
+                  <div class="panel-body-area">
+                    
+                    <!-- iOS Guide Box -->
+                    <div class="guide-box-os" style="margin-bottom: 16px;">
+                      <div class="guide-os-header">
+                        <span class="os-icon">🍎</span>
+                        <strong>Trên iPhone / iPad (Trình duyệt Safari)</strong>
+                      </div>
+                      <ol class="guide-os-steps">
+                        <li>Mở trang web bằng trình duyệt <strong>Safari</strong> trên iPhone/iPad.</li>
+                        <li>Bấm vào biểu tượng <strong>Chia sẻ (Share) 📤</strong> ở thanh công cụ dưới đáy màn hình.</li>
+                        <li>Cuộn xuống danh sách và chọn <strong>"Thêm vào MH chính"</strong> (hoặc <strong>"Add to Home Screen" ➕</strong>).</li>
+                        <li>Nhấn nút <strong>"Thêm" (Add)</strong> ở góc trên bên phải để hoàn tất. Biểu tượng ứng dụng sẽ xuất hiện trên màn hình chính của bạn.</li>
+                      </ol>
+                    </div>
+
+                    <!-- Android Guide Box -->
+                    <div class="guide-box-os">
+                      <div class="guide-os-header">
+                        <span class="os-icon">🤖</span>
+                        <strong>Trên Điện thoại Android (Chrome / Edge / Samsung Internet)</strong>
+                      </div>
+                      <ol class="guide-os-steps">
+                        <li>Bấm nút <strong>"📲 Cài đặt ngay lên thiết bị"</strong> ở trên hoặc nút <strong>"📲 Cài App"</strong> trên thanh tiêu đề.</li>
+                        <li>Trình duyệt sẽ hiển thị hộp thoại xác nhận ➔ Nhấn <strong>"Cài đặt" (Install)</strong>.</li>
+                        <li>Nếu không thấy hộp thoại: Bấm vào biểu tượng <strong>3 chấm (⋮)</strong> ở góc trên bên phải trình duyệt ➔ Chọn <strong>"Cài đặt ứng dụng"</strong> hoặc <strong>"Thêm vào Màn hình chính"</strong>.</li>
+                      </ol>
+                    </div>
+
+                  </div>
+                </div>
+
               </div>
             </div>
 

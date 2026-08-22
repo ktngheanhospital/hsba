@@ -1,0 +1,65 @@
+{
+  "id": "/?source=pwa",
+  "name": "Theo dõi HSBA - BV HNĐK Nghệ An",
+  "short_name": "Theo dõi HSBA",
+  "description": "Hệ thống Quản lý và Theo dõi HSBA Bệnh Viện Hữu Nghị Đa Khoa Nghệ An - Giai đoạn 2",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "window-controls-overlay"],
+  "orientation": "any",
+  "background_color": "#0F766E",
+  "theme_color": "#0F766E",
+  "lang": "vi",
+  "dir": "ltr",
+  "categories": ["medical", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Rà soát lỗi",
+      "short_name": "Rà soát",
+      "description": "Danh sách hồ sơ bệnh án rà soát lỗi",
+      "url": "/?tab=records",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Báo cáo ra viện",
+      "short_name": "Ra viện",
+      "description": "Báo cáo và chốt ca ra viện các khâu",
+      "url": "/?tab=discharge",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Tổng quan Dashboard",
+      "short_name": "Dashboard",
+      "description": "Báo cáo phân tích và biểu đồ tỷ lệ lỗi",
+      "url": "/?tab=dashboard",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
