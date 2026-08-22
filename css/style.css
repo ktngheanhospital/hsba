@@ -493,6 +493,36 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25);
 }
 
+.btn-header-action-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-soft);
+  background: var(--surface-subtle);
+  color: var(--slate-700);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  outline: none;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+}
+
+.btn-header-change-pass {
+  border-color: #fef08a;
+  background: #fefce8;
+  color: #a16207;
+}
+
+.btn-header-change-pass:hover {
+  background: #fef9c3;
+  border-color: #eab308;
+  color: #854d0e;
+  transform: scale(1.05);
+}
+
 .btn-header-logout {
   width: 30px;
   height: 30px;
@@ -506,6 +536,7 @@ h1, h2, h3, h4, h5, h6 {
   justify-content: center;
   transition: all 0.15s ease;
   outline: none;
+  flex-shrink: 0;
 }
 
 .btn-header-logout:hover {
@@ -4713,3 +4744,156 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 0.75rem;
   font-weight: bold;
 }
+
+/* ==========================================================================
+   DOCTOR / STAFF FAST AUTOCOMPLETE DROPDOWN
+   ========================================================================== */
+.doctor-autocomplete-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.doctor-autocomplete-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 250px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #ffffff;
+  border: 1.5px solid var(--teal-400, #2dd4bf);
+  border-radius: var(--radius-sm, 10px);
+  box-shadow: 0 16px 36px -4px rgba(15, 23, 42, 0.22), 0 6px 12px -2px rgba(0, 0, 0, 0.08);
+  z-index: 2100;
+  padding: 4px 0;
+  display: none;
+}
+
+.doctor-autocomplete-dropdown.show {
+  display: block;
+  animation: fadeInAc 0.12s ease-out;
+}
+
+@keyframes fadeInAc {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.doctor-ac-header {
+  padding: 6px 12px 4px 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--teal-800, #115e59);
+  background: var(--teal-50, #f0fdfa);
+  border-bottom: 1px solid var(--teal-100, #ccfbf1);
+  letter-spacing: 0.03em;
+}
+
+.doctor-ac-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  min-height: 46px;
+  box-sizing: border-box;
+  cursor: pointer;
+  border-bottom: 1px solid #f1f5f9;
+  background: #ffffff;
+  transition: all 0.1s ease;
+}
+
+.doctor-ac-item:last-child {
+  border-bottom: none;
+}
+
+.doctor-ac-item:hover,
+.doctor-ac-item.active {
+  background-color: var(--teal-50, #f0fdfa);
+  border-left: 3px solid var(--teal-600, #0d9488);
+  padding-left: 10px;
+}
+
+.doctor-ac-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.doctor-ac-name {
+  font-weight: 700;
+  font-size: 0.84rem;
+  color: var(--slate-900, #0f172a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+
+.doctor-ac-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--slate-500, #64748b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.doctor-ac-dept-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: var(--slate-700, #334155);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid var(--slate-200, #e2e8f0);
+}
+
+.doctor-ac-dept-badge.current-dept {
+  background: #ccfbf1;
+  color: #0f766e;
+  border-color: #5eead4;
+  font-weight: 700;
+}
+
+.doctor-ac-empty {
+  padding: 14px;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--slate-500, #64748b);
+}
+
+@media (max-width: 640px) {
+  .doctor-autocomplete-dropdown {
+    max-height: 220px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+  }
+  .doctor-ac-item {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .doctor-ac-name {
+    font-size: 0.82rem;
+  }
+  .doctor-ac-dept-badge {
+    max-width: 110px;
+    font-size: 0.68rem;
+    padding: 2px 6px;
+  }
+}
+

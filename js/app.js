@@ -169,6 +169,13 @@ class App {
         }
       };
     }
+
+    const btnLoginChangePass = document.getElementById('btn-login-open-change-password');
+    if (btnLoginChangePass) {
+      btnLoginChangePass.onclick = () => {
+        this.modalController.openChangePasswordModal(null, true);
+      };
+    }
   }
 
   // Xử lý sau khi Đăng nhập thành công
@@ -230,6 +237,11 @@ class App {
     const btnLogout = document.getElementById('btn-header-logout');
     if (btnLogout) {
       btnLogout.onclick = () => this.handleLogout();
+    }
+
+    const btnChangePass = document.getElementById('btn-header-change-password');
+    if (btnChangePass) {
+      btnChangePass.onclick = () => this.modalController.openChangePasswordModal();
     }
   }
 
@@ -3524,6 +3536,7 @@ class App {
           </td>
           <td class="text-center">
             <div class="action-buttons-group" style="justify-content: center;">
+              <button class="btn-action-icon btn-key" onclick="window.hsbaApp.modalController.openChangePasswordModal('${staff.id}')" title="Đổi / Đặt lại mật khẩu nhân viên" style="background:#fef3c7; color:#b45309; border-color:#fde68a;">🔑</button>
               <button class="btn-action-icon btn-edit" onclick="window.hsbaApp.modalController.openStaffModal('${staff.id}')" title="Sửa hồ sơ nhân viên">✏️</button>
               <button class="btn-action-icon btn-danger" onclick="window.hsbaApp.deleteStaff('${staff.id}', '${escapeHtml(staff.name)}')" title="Xóa nhân viên">🗑️</button>
             </div>

@@ -9,7 +9,215 @@
 import { storage } from './storage.js';
 import { notificationService } from './notificationService.js';
 import { MUC_DO_CANH_BAO, TRANG_THAI_KIEM_DUYET, TRANG_THAI_LOI } from './data.js';
-import { showToast, getTodayDateString, getNowDateTimeString, escapeHtml, printRecordSheet, formatDateTimeVN, formatDateVN, getMucDoLoiBadge, getDefaultDischargeDateTime, formatDischargeDateTimeVN } from './utils.js';
+import { showToast, getTodayDateString, getNowDateTimeString, escapeHtml, printRecordSheet, formatDateTimeVN, formatDateVN, getMucDoLoiBadge, getDefaultDischargeDateTime, formatDischargeDateTimeVN, removeVietnameseTones } from './utils.js';
+
+/**
+ * Trình hỗ trợ Autocomplete Bác sĩ / Người chỉ định siêu mượt, tức thời 0ms,
+ * tìm kiếm không dấu và không tự động nhảy đè Khoa/Phòng trong lúc gõ phím.
+ */
+function setupDoctorAutocomplete({ inputEl, deptSelectEl, staffList, onSelect }) {
+  if (!inputEl) return;
+
+  // Bọc input vào container position: relative
+  let wrap = inputEl.parentElement;
+  if (!wrap.classList.contains('doctor-autocomplete-wrap')) {
+    wrap = document.createElement('div');
+    wrap.className = 'doctor-autocomplete-wrap';
+    inputEl.parentNode.insertBefore(wrap, inputEl);
+    wrap.appendChild(inputEl);
+  }
+
+  let dropdown = wrap.querySelector('.doctor-autocomplete-dropdown');
+  if (!dropdown) {
+    dropdown = document.createElement('div');
+    dropdown.className = 'doctor-autocomplete-dropdown';
+    wrap.appendChild(dropdown);
+  }
+
+  let activeIndex = -1;
+  let currentFiltered = [];
+
+  const renderDropdown = () => {
+    const rawVal = inputEl.value.trim();
+    const queryNorm = removeVietnameseTones(rawVal);
+    const selectedDept = deptSelectEl ? deptSelectEl.value.trim() : '';
+
+    let results = [];
+    if (!queryNorm) {
+      // Khi chưa gõ: Ưu tiên hiển thị danh sách bác sĩ thuộc Khoa đã chọn lên đầu
+      const sameDept = selectedDept ? staffList.filter(s => s.department === selectedDept) : [];
+      const otherDept = selectedDept ? staffList.filter(s => s.department !== selectedDept) : staffList;
+      results = [...sameDept, ...otherDept];
+    } else {
+      // Tìm kiếm thông minh: theo tên, khoa phòng, hoặc chức danh (hỗ trợ không dấu)
+      results = staffList.filter(s => {
+        const nameNorm = removeVietnameseTones(s.name || '');
+        const deptNorm = removeVietnameseTones(s.department || '');
+        const posNorm = removeVietnameseTones(s.position || '');
+        return nameNorm.includes(queryNorm) || deptNorm.includes(queryNorm) || posNorm.includes(queryNorm);
+      });
+
+      // Sắp xếp ưu tiên: Tên bắt đầu khớp -> Bác sĩ thuộc Khoa đang chọn -> Các kết quả khác
+      results.sort((a, b) => {
+        const aName = removeVietnameseTones(a.name || '');
+        const bName = removeVietnameseTones(b.name || '');
+        const aStart = aName.startsWith(queryNorm);
+        const bStart = bName.startsWith(queryNorm);
+        if (aStart && !bStart) return -1;
+        if (!aStart && bStart) return 1;
+
+        if (selectedDept) {
+          const aInDept = a.department === selectedDept;
+          const bInDept = b.department === selectedDept;
+          if (aInDept && !bInDept) return -1;
+          if (!aInDept && bInDept) return 1;
+        }
+        return 0;
+      });
+    }
+
+    currentFiltered = results.slice(0, 16);
+    activeIndex = -1;
+
+    if (currentFiltered.length === 0) {
+      dropdown.innerHTML = `
+        <div class="doctor-ac-empty">
+          Không tìm thấy bác sĩ nào khớp với "<strong>${escapeHtml(rawVal)}</strong>"
+          <div style="margin-top: 4px; font-size: 0.72rem; color: var(--slate-500);">Bạn vẫn có thể tiếp tục nhập tên này tự do theo bệnh án.</div>
+        </div>
+      `;
+      dropdown.classList.add('show');
+      return;
+    }
+
+    let html = '';
+    const sameDeptItems = selectedDept ? currentFiltered.filter(s => s.department === selectedDept) : [];
+    const otherDeptItems = selectedDept ? currentFiltered.filter(s => s.department !== selectedDept) : currentFiltered;
+
+    let itemIdx = 0;
+    const makeItemHtml = (staff, isCurDept = false) => {
+      const curIdx = itemIdx++;
+      return `
+        <div class="doctor-ac-item" data-index="${curIdx}">
+          <div class="doctor-ac-info">
+            <div class="doctor-ac-name">👨‍⚕️ ${escapeHtml(staff.name)}</div>
+            <div class="doctor-ac-meta">
+              <span>${escapeHtml(staff.position || 'Bác sĩ')}</span>
+              ${staff.phone ? `<span>· 📞 ${escapeHtml(staff.phone)}</span>` : ''}
+            </div>
+          </div>
+          <span class="doctor-ac-dept-badge ${isCurDept ? 'current-dept' : ''}">
+            ${isCurDept ? '⚡ ' : ''}${escapeHtml(staff.department || 'Khác')}
+          </span>
+        </div>
+      `;
+    };
+
+    if (selectedDept && sameDeptItems.length > 0) {
+      html += `<div class="doctor-ac-header">⚡ Bác sĩ thuộc ${escapeHtml(selectedDept)} (${sameDeptItems.length})</div>`;
+      sameDeptItems.forEach(s => {
+        html += makeItemHtml(s, true);
+      });
+      if (otherDeptItems.length > 0) {
+        html += `<div class="doctor-ac-header" style="margin-top: 4px;">Khoa / Phòng khác</div>`;
+        otherDeptItems.forEach(s => {
+          html += makeItemHtml(s, false);
+        });
+      }
+      currentFiltered = [...sameDeptItems, ...otherDeptItems];
+    } else {
+      currentFiltered.forEach(s => {
+        html += makeItemHtml(s, s.department === selectedDept);
+      });
+    }
+
+    dropdown.innerHTML = html;
+    dropdown.classList.add('show');
+
+    dropdown.querySelectorAll('.doctor-ac-item').forEach(el => {
+      el.onmousedown = (e) => {
+        e.preventDefault();
+        const idx = parseInt(el.getAttribute('data-index'), 10);
+        handleSelect(currentFiltered[idx]);
+      };
+    });
+  };
+
+  const handleSelect = (staff) => {
+    if (!staff) return;
+    inputEl.value = staff.name;
+
+    // Tự động điền/cập nhật Khoa/Phòng CHỈ KHI người dùng bấm chọn rõ ràng từ danh sách
+    if (deptSelectEl && staff.department) {
+      const opt = Array.from(deptSelectEl.options).find(o => o.value === staff.department);
+      if (opt) {
+        deptSelectEl.value = staff.department;
+      }
+    }
+
+    dropdown.classList.remove('show');
+    if (typeof onSelect === 'function') onSelect(staff);
+  };
+
+  const updateActiveVisual = () => {
+    const items = dropdown.querySelectorAll('.doctor-ac-item');
+    items.forEach((item, i) => {
+      if (i === activeIndex) {
+        item.classList.add('active');
+        item.scrollIntoView({ block: 'nearest' });
+      } else {
+        item.classList.remove('active');
+      }
+    });
+  };
+
+  inputEl.addEventListener('focus', () => {
+    renderDropdown();
+  });
+
+  inputEl.addEventListener('input', () => {
+    // KHÔNG BAO GIỜ can thiệp đổi Khoa/Phòng khi người dùng đang gõ phím!
+    renderDropdown();
+  });
+
+  inputEl.addEventListener('keydown', (e) => {
+    if (!dropdown.classList.contains('show')) return;
+    const items = dropdown.querySelectorAll('.doctor-ac-item');
+    if (!items.length) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      activeIndex = (activeIndex + 1) % items.length;
+      updateActiveVisual();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIndex = (activeIndex - 1 + items.length) % items.length;
+      updateActiveVisual();
+    } else if (e.key === 'Enter') {
+      if (activeIndex >= 0 && activeIndex < currentFiltered.length) {
+        e.preventDefault();
+        handleSelect(currentFiltered[activeIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      dropdown.classList.remove('show');
+    }
+  });
+
+  if (deptSelectEl) {
+    deptSelectEl.addEventListener('change', () => {
+      if (dropdown.classList.contains('show')) {
+        renderDropdown();
+      }
+    });
+  }
+
+  const onDocClick = (e) => {
+    if (!wrap.contains(e.target)) {
+      dropdown.classList.remove('show');
+    }
+  };
+  document.addEventListener('click', onDocClick);
+}
 
 export class ModalController {
   constructor(app) {
@@ -74,7 +282,6 @@ export class ModalController {
     const nowDateTime = getNowDateTimeString().replace(' ', 'T');
 
     const deptOptions = departments.map(d => `<option value="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`).join('');
-    const staffOptions = staffList.map(s => `<option value="${escapeHtml(s.name)}" data-dept="${escapeHtml(s.department)}">${escapeHtml(s.name)} (${escapeHtml(s.position)} - ${escapeHtml(s.department)})</option>`).join('');
 
     const html = `
       <div class="modal-header">
@@ -93,7 +300,7 @@ export class ModalController {
           <!-- 1. Mã KCB -->
           <div class="form-group">
             <label class="form-label required">1. Mã KCB (Mã bệnh án):</label>
-            <input type="text" id="add-maKCB" class="form-input" placeholder="Ví dụ: BN-2026-08412" required autofocus />
+            <input type="text" id="add-maKCB" class="form-input font-bold text-primary" placeholder="Ví dụ: BN-2026-08412" required autofocus />
             <div class="field-error" id="err-maKCB"></div>
           </div>
 
@@ -117,11 +324,10 @@ export class ModalController {
           <!-- 4. Người chỉ định/thực hiện -->
           <div class="form-group">
             <label class="form-label">4. Người chỉ định / thực hiện YL:</label>
-            <input type="text" id="add-nguoiChiDinh" list="dl-add-staff" class="form-input" placeholder="Gõ tên hoặc chọn bác sĩ từ danh sách..." autocomplete="off" />
-            <datalist id="dl-add-staff">
-              ${staffOptions}
-            </datalist>
-            <small class="form-help text-xs text-muted" style="margin-top: 3px;">Gõ trực tiếp tên bác sĩ hoặc chọn nhanh từ danh mục để hệ thống bắn Push Notification tự động</small>
+            <div class="doctor-autocomplete-wrap">
+              <input type="text" id="add-nguoiChiDinh" class="form-input" placeholder="Gõ tên hoặc chọn bác sĩ từ gợi ý..." autocomplete="off" />
+            </div>
+            <small class="form-help text-xs text-muted" style="margin-top: 3px;">Nhấp vào ô để xem danh sách bác sĩ thuộc khoa hoặc gõ tên tìm kiếm nhanh</small>
           </div>
 
           <!-- 5. Ngày vào khoa -->
@@ -179,22 +385,14 @@ export class ModalController {
     document.getElementById('btn-modal-close').onclick = () => this.closeModal();
     document.getElementById('btn-cancel-add').onclick = () => this.closeModal();
 
-    // Tự động nhận diện và chọn Khoa/Phòng khi gõ hoặc chọn tên bác sĩ
+    // Khởi tạo Autocomplete thông minh siêu tốc & không bao giờ tự nhảy Khoa/Phòng ngoài ý muốn
     const inputDoctor = document.getElementById('add-nguoiChiDinh');
     const selectDept = document.getElementById('add-khoaPhong');
-    if (inputDoctor && selectDept) {
-      inputDoctor.addEventListener('input', (e) => {
-        const val = e.target.value.trim().toLowerCase();
-        if (!val) return;
-        const matched = staffList.find(s => s.name.toLowerCase() === val || (s.name + ' (' + s.position + ')').toLowerCase().includes(val));
-        if (matched && matched.department) {
-          const opt = Array.from(selectDept.options).find(o => o.value === matched.department);
-          if (opt) {
-            selectDept.value = matched.department;
-          }
-        }
-      });
-    }
+    setupDoctorAutocomplete({
+      inputEl: inputDoctor,
+      deptSelectEl: selectDept,
+      staffList: staffList
+    });
 
     const form = document.getElementById('form-add-error');
     form.onsubmit = (e) => {
@@ -367,11 +565,10 @@ export class ModalController {
             <div class="form-group">
               <label class="form-label">Người chỉ định / thực hiện:</label>
               ${canEditGroup1 ? `
-                <input type="text" id="edit-nguoiChiDinh" list="dl-edit-staff" class="form-input" value="${escapeHtml(record.nguoiChiDinh || '')}" placeholder="Gõ tên hoặc chọn bác sĩ từ danh sách..." autocomplete="off" />
-                <datalist id="dl-edit-staff">
-                  ${staffOptions}
-                </datalist>
-                <small class="form-help text-xs text-muted" style="margin-top: 3px;">Có thể gõ trực tiếp tên bác sĩ hoặc chọn nhanh từ danh mục</small>
+                <div class="doctor-autocomplete-wrap">
+                  <input type="text" id="edit-nguoiChiDinh" class="form-input" value="${escapeHtml(record.nguoiChiDinh || '')}" placeholder="Gõ tên hoặc chọn bác sĩ từ gợi ý..." autocomplete="off" />
+                </div>
+                <small class="form-help text-xs text-muted" style="margin-top: 3px;">Nhấp vào ô để xem danh sách bác sĩ thuộc khoa hoặc gõ tên tìm kiếm nhanh</small>
               ` : `
                 <input type="text" id="edit-nguoiChiDinh" class="form-input" value="${escapeHtml(record.nguoiChiDinh || '---')}" readonly />
               `}
@@ -468,6 +665,16 @@ export class ModalController {
 
     document.getElementById('btn-modal-close').onclick = () => this.closeModal();
     document.getElementById('btn-cancel-edit').onclick = () => this.closeModal();
+    
+    if (canEditGroup1) {
+      const editDoctorInput = document.getElementById('edit-nguoiChiDinh');
+      const editDeptSelect = document.getElementById('edit-khoaPhong');
+      setupDoctorAutocomplete({
+        inputEl: editDoctorInput,
+        deptSelectEl: editDeptSelect,
+        staffList: staffList
+      });
+    }
     
     document.getElementById('btn-print-record').onclick = () => {
       printRecordSheet(record);
@@ -593,10 +800,9 @@ export class ModalController {
           <!-- 6. Bác sĩ điều trị -->
           <div class="form-group">
             <label class="form-label required">6. Bác sĩ điều trị:</label>
-            <input type="text" id="rep-tenBacSi" list="dl-rep-staff" class="form-input" placeholder="Gõ tên hoặc chọn bác sĩ..." autocomplete="off" required />
-            <datalist id="dl-rep-staff">
-              ${doctorOptions}
-            </datalist>
+            <div class="doctor-autocomplete-wrap">
+              <input type="text" id="rep-tenBacSi" class="form-input" placeholder="Gõ tên hoặc chọn bác sĩ..." autocomplete="off" required />
+            </div>
           </div>
 
           <!-- 7. Người báo cáo -->
@@ -632,19 +838,14 @@ export class ModalController {
       };
     }
 
-    // Tự động điền Khoa khi chọn Bác sĩ
+    // Khởi tạo Autocomplete thông minh siêu tốc & không bao giờ tự nhảy Khoa/Phòng ngoài ý muốn
     const doctorInput = document.getElementById('rep-tenBacSi');
     const deptSelect = document.getElementById('rep-phong');
-    if (doctorInput && deptSelect) {
-      doctorInput.oninput = (e) => {
-        const val = e.target.value.trim().toLowerCase();
-        const matched = staffList.find(s => s.name.toLowerCase() === val);
-        if (matched && matched.department) {
-          const opt = Array.from(deptSelect.options).find(o => o.value === matched.department);
-          if (opt) deptSelect.value = matched.department;
-        }
-      };
-    }
+    setupDoctorAutocomplete({
+      inputEl: doctorInput,
+      deptSelectEl: deptSelect,
+      staffList: staffList
+    });
 
     const saveDischargeHandler = (keepOpen = false) => {
       const ngayBaoCao = document.getElementById('rep-ngayBaoCao').value;
@@ -1328,6 +1529,165 @@ export class ModalController {
       showToast(`Đã lưu nhân viên: ${name}`, 'success');
       this.closeModal();
       this.app.refreshAllViews();
+    };
+  }
+
+  // Modal Đổi mật khẩu tài khoản (Hỗ trợ người dùng tự đổi, Admin đặt lại, hoặc đổi từ màn hình đăng nhập)
+  openChangePasswordModal(targetStaffId = null, fromLoginScreen = false) {
+    const currentUser = storage.getCurrentUser();
+    const isAdmin = storage.isAdmin() || storage.getCurrentRole() === 'IT';
+    const staffList = storage.getStaff();
+
+    let targetStaff = null;
+    if (targetStaffId) {
+      targetStaff = staffList.find(s => s.id === targetStaffId);
+    } else if (currentUser && !fromLoginScreen) {
+      targetStaff = currentUser;
+    }
+
+    const isAdminResettingOther = isAdmin && targetStaff && currentUser && (targetStaff.id !== currentUser.id);
+    const isAnonymous = !currentUser || fromLoginScreen;
+
+    const modalTitle = isAdminResettingOther 
+      ? `Đặt lại mật khẩu cho: ${escapeHtml(targetStaff.name)}`
+      : 'Đổi mật khẩu tài khoản';
+
+    const modalSubtitle = targetStaff 
+      ? `Tài khoản: <strong>${escapeHtml(targetStaff.username || targetStaff.id)}</strong> (${escapeHtml(targetStaff.position || 'Nhân viên')})`
+      : 'Cập nhật mật khẩu bảo mật cho tài khoản của bạn';
+
+    const html = `
+      <div class="modal-header">
+        <div class="modal-header-title">
+          <span class="modal-icon-badge" style="background: #fef3c7; color: #b45309;">🔑</span>
+          <div>
+            <h3>${modalTitle}</h3>
+            <p class="modal-subtitle">${modalSubtitle}</p>
+          </div>
+        </div>
+        <button class="btn-close-modal" id="btn-modal-close">&times;</button>
+      </div>
+
+      <form id="form-change-password" class="modal-form">
+        <div id="change-pass-error-alert" class="role-alert-banner alert-ketoan" style="display: none; background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; font-weight: 600;"></div>
+
+        ${isAnonymous ? `
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label class="form-label required">Tên đăng nhập / Số điện thoại:</label>
+            <input type="text" id="cp-username" class="form-input font-mono" placeholder="Nhập username hoặc số điện thoại..." required autofocus />
+          </div>
+        ` : ''}
+
+        ${!isAdminResettingOther ? `
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label class="form-label required">Mật khẩu hiện tại:</label>
+            <div class="password-input-wrapper" style="position: relative; display: flex; align-items: center;">
+              <input type="password" id="cp-old-password" class="form-input font-mono" placeholder="Nhập mật khẩu hiện tại (mặc định: 123)..." required ${!isAnonymous ? 'autofocus' : ''} style="padding-right: 42px;" />
+              <button type="button" class="btn-toggle-eye" data-target="cp-old-password" title="Hiện / Ẩn mật khẩu" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; font-size: 1.1rem; padding: 4px;">👁️</button>
+            </div>
+            <span class="text-caption text-muted" style="margin-top: 3px; display: block; font-size: 0.75rem;">Mật khẩu ban đầu mặc định là <code>123</code> nếu bạn chưa từng thay đổi.</span>
+          </div>
+        ` : `
+          <div class="role-alert-banner alert-admin" style="margin-bottom: 14px; font-size: 0.8rem;">
+            👑 <strong>Quyền Quản trị viên:</strong> Bạn đang đặt lại mật khẩu trực tiếp cho nhân viên <strong>${escapeHtml(targetStaff.name)}</strong> mà không cần nhập mật khẩu cũ.
+          </div>
+        `}
+
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label class="form-label required">Mật khẩu mới:</label>
+          <div class="password-input-wrapper" style="position: relative; display: flex; align-items: center;">
+            <input type="password" id="cp-new-password" class="form-input font-mono" placeholder="Nhập mật khẩu mới (tối thiểu 3 ký tự)..." required minlength="3" style="padding-right: 42px;" />
+            <button type="button" class="btn-toggle-eye" data-target="cp-new-password" title="Hiện / Ẩn mật khẩu" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; font-size: 1.1rem; padding: 4px;">👁️</button>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label class="form-label required">Xác nhận mật khẩu mới:</label>
+          <div class="password-input-wrapper" style="position: relative; display: flex; align-items: center;">
+            <input type="password" id="cp-confirm-password" class="form-input font-mono" placeholder="Nhập lại mật khẩu mới..." required minlength="3" style="padding-right: 42px;" />
+            <button type="button" class="btn-toggle-eye" data-target="cp-confirm-password" title="Hiện / Ẩn mật khẩu" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; font-size: 1.1rem; padding: 4px;">👁️</button>
+          </div>
+        </div>
+
+        <div class="modal-footer" style="margin-top: 18px;">
+          <button type="button" class="btn btn-secondary" id="btn-cp-cancel">Hủy</button>
+          <button type="submit" class="btn btn-primary" id="btn-cp-submit">
+            <span>💾 Cập nhật Mật khẩu</span>
+          </button>
+        </div>
+      </form>
+    `;
+
+    this.renderModal(html, 'modal-md');
+    document.getElementById('btn-modal-close').onclick = () => this.closeModal();
+    document.getElementById('btn-cp-cancel').onclick = () => this.closeModal();
+
+    // Toggle Eye Buttons
+    const eyeBtns = document.querySelectorAll('.btn-toggle-eye');
+    eyeBtns.forEach(btn => {
+      btn.onclick = (e) => {
+        e.preventDefault();
+        const targetId = btn.getAttribute('data-target');
+        const input = document.getElementById(targetId);
+        if (input) {
+          if (input.type === 'password') {
+            input.type = 'text';
+            btn.textContent = '🙈';
+          } else {
+            input.type = 'password';
+            btn.textContent = '👁️';
+          }
+        }
+      };
+    });
+
+    const form = document.getElementById('form-change-password');
+    const errAlert = document.getElementById('change-pass-error-alert');
+
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      errAlert.style.display = 'none';
+
+      const oldPassEl = document.getElementById('cp-old-password');
+      const oldPass = oldPassEl ? oldPassEl.value : '';
+      const newPass = document.getElementById('cp-new-password').value;
+      const confirmPass = document.getElementById('cp-confirm-password').value;
+
+      if (newPass !== confirmPass) {
+        errAlert.textContent = '⚠️ Xác nhận mật khẩu mới không khớp!';
+        errAlert.style.display = 'block';
+        return;
+      }
+
+      if (newPass.length < 3) {
+        errAlert.textContent = '⚠️ Mật khẩu mới phải có ít nhất 3 ký tự!';
+        errAlert.style.display = 'block';
+        return;
+      }
+
+      let res;
+      if (isAnonymous) {
+        const usernameOrPhone = document.getElementById('cp-username').value.trim();
+        res = storage.changePasswordByUsernameOrPhone(usernameOrPhone, oldPass, newPass);
+      } else if (isAdminResettingOther) {
+        res = storage.changePassword(targetStaff.id, '', newPass, true);
+      } else {
+        res = storage.changePassword(targetStaff.id, oldPass, newPass, false);
+      }
+
+      if (res.success) {
+        showToast(`🎉 ${res.message}`, 'success');
+        this.closeModal();
+        if (this.app) {
+          this.app.renderHeaderUserProfile();
+          if (this.app.currentTab === 'settings' && this.app.settingsSubTab === 'staff') {
+            this.app.renderStaffSettings();
+          }
+        }
+      } else {
+        errAlert.textContent = `⚠️ ${res.message}`;
+        errAlert.style.display = 'block';
+      }
     };
   }
 

@@ -337,6 +337,68 @@ export class StorageService {
     return { success: true, user: staff };
   }
 
+  // Đổi mật khẩu cho tài khoản người dùng
+  changePassword(userId, oldPassword, newPassword, bypassOldPassword = false) {
+    if (!userId) {
+      return { success: false, message: 'Không tìm thấy thông tin tài khoản cần đổi mật khẩu!' };
+    }
+
+    const staffList = this.getStaff();
+    const staff = staffList.find(s => s.id === userId);
+    if (!staff) {
+      return { success: false, message: 'Tài khoản không tồn tại trong hệ thống!' };
+    }
+
+    const cleanOld = oldPassword ? String(oldPassword).trim() : '';
+    const cleanNew = newPassword ? String(newPassword).trim() : '';
+
+    if (!cleanNew) {
+      return { success: false, message: 'Vui lòng nhập mật khẩu mới!' };
+    }
+
+    if (cleanNew.length < 3) {
+      return { success: false, message: 'Mật khẩu mới phải có ít nhất 3 ký tự!' };
+    }
+
+    if (!bypassOldPassword) {
+      const currentPass = staff.password !== undefined && staff.password !== null && staff.password !== ''
+        ? String(staff.password).trim()
+        : '123';
+
+      if (cleanOld !== currentPass) {
+        return { success: false, message: 'Mật khẩu hiện tại không chính xác!' };
+      }
+    }
+
+    const updated = this.updateStaff(staff.id, { password: cleanNew });
+    if (updated) {
+      return { success: true, message: 'Đổi mật khẩu thành công!' };
+    }
+    return { success: false, message: 'Không thể lưu mật khẩu mới. Vui lòng thử lại!' };
+  }
+
+  // Đổi mật khẩu dựa theo Tên đăng nhập hoặc Số điện thoại (Dùng khi quên hoặc từ màn hình đăng nhập)
+  changePasswordByUsernameOrPhone(usernameOrPhone, oldPassword, newPassword) {
+    if (!usernameOrPhone) {
+      return { success: false, message: 'Vui lòng nhập tên đăng nhập hoặc số điện thoại!' };
+    }
+
+    const cleanUser = usernameOrPhone.trim().toLowerCase();
+    const staffList = this.getStaff();
+
+    const staff = staffList.find(s => 
+      (s.username && s.username.toLowerCase() === cleanUser) ||
+      (s.phone && s.phone.replace(/[^0-9]/g, '') === cleanUser.replace(/[^0-9]/g, '') && cleanUser.length >= 8) ||
+      (s.id && s.id.toLowerCase() === cleanUser)
+    );
+
+    if (!staff) {
+      return { success: false, message: 'Không tìm thấy tài khoản với thông tin đã nhập!' };
+    }
+
+    return this.changePassword(staff.id, oldPassword, newPassword, false);
+  }
+
   loginAsStaff(staffId) {
     const staffList = this.getStaff();
     const staff = staffList.find(s => s.id === staffId);

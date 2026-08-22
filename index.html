@@ -94,8 +94,11 @@
           <span>Đăng Nhập Vào Hệ Thống ➔</span>
         </button>
 
-        <div style="text-align: center; margin-top: 14px; font-size: 0.78rem; color: var(--slate-500);">
-          Đăng nhập bằng Tên tài khoản / Mã nhân viên và Mật khẩu được cấp trong danh mục Nhân sự.
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 10px; border-top: 1px dashed var(--border-soft);">
+          <span style="font-size: 0.76rem; color: var(--slate-500);">Mật khẩu ban đầu: <code>123</code></span>
+          <button type="button" class="btn-text-link" id="btn-login-open-change-password" style="background: none; border: none; font-size: 0.78rem; font-weight: 700; color: var(--teal-700); cursor: pointer; text-decoration: underline;">
+            🔑 Đổi mật khẩu tài khoản
+          </button>
         </div>
       </form>
 
@@ -206,6 +209,11 @@
               </div>
               <span class="user-profile-dept" id="header-user-dept">Khoa/Phòng</span>
             </div>
+
+            <!-- Change Password Button -->
+            <button class="btn-header-action-icon btn-header-change-pass" id="btn-header-change-password" title="Đổi mật khẩu tài khoản">
+              🔑
+            </button>
 
             <!-- Logout Button -->
             <button class="btn-header-logout" id="btn-header-logout" title="Đăng xuất khỏi hệ thống">
