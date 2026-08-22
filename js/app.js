@@ -3250,6 +3250,20 @@ class App {
       };
     }
 
+    const btnCopySql = document.getElementById('btn-copy-supabase-sql');
+    if (btnCopySql) {
+      btnCopySql.onclick = () => {
+        const sqlEl = document.getElementById('supabase-sql-code');
+        if (sqlEl) {
+          navigator.clipboard.writeText(sqlEl.innerText).then(() => {
+            showToast('📋 Đã sao chép toàn bộ mã SQL vào bộ nhớ đệm!', 'success');
+          }).catch(() => {
+            showToast('Vui lòng chọn văn bản SQL để sao chép thủ công.', 'info');
+          });
+        }
+      };
+    }
+
     // Đăng ký nhận thông báo thay đổi trạng thái Supabase
     supabaseService.onStatusChange(({ connected, message }) => {
       this.updateSupabaseStatusUI(connected, message);

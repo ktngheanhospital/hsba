@@ -26,7 +26,113 @@ class SupabaseService {
     this.realtimeCallback = null;
     this.heartbeatTimer = null;
     this.lastSyncTimestamp = 0;
+    this.missingColumnsByTable = {};
     this.initClient();
+  }
+
+  getMissingColumnsForTable(tableName) {
+    if (!this.missingColumnsByTable) this.missingColumnsByTable = {};
+    if (!this.missingColumnsByTable[tableName]) {
+      // Load previously saved missing columns cache from localStorage
+      const cached = localStorage.getItem(`theo_doi_hsba_missing_cols_${tableName}`);
+      if (cached) {
+        try {
+          this.missingColumnsByTable[tableName] = new Set(JSON.parse(cached));
+        } catch (e) {
+          this.missingColumnsByTable[tableName] = new Set();
+        }
+      } else {
+        this.missingColumnsByTable[tableName] = new Set();
+      }
+    }
+    return this.missingColumnsByTable[tableName];
+  }
+
+  addMissingColumnForTable(tableName, columnName) {
+    if (!tableName || !columnName) return;
+    const colSet = this.getMissingColumnsForTable(tableName);
+    colSet.add(columnName);
+    try {
+      localStorage.setItem(`theo_doi_hsba_missing_cols_${tableName}`, JSON.stringify(Array.from(colSet)));
+    } catch (e) {}
+    console.warn(`[Supabase Schema Adaptive] Tự động bỏ qua cột '${columnName}' do bảng '${tableName}' trên Cloud chưa có cột này.`);
+  }
+
+  cleanRowForTable(tableName, row) {
+    if (!row || typeof row !== 'object') return row;
+    const clean = { ...row };
+    const missing = this.getMissingColumnsForTable(tableName);
+    missing.forEach(col => {
+      delete clean[col];
+    });
+    return clean;
+  }
+
+  // Phương thức Upsert thông minh: tự động phát hiện và loại bỏ các cột không tồn tại trên Cloud, tự chuyển đổi JSON sang TEXT nếu cần
+  async robustUpsert(tableName, data, maxRetries = 6) {
+    if (!this.client || !data) return false;
+
+    let payload;
+    if (Array.isArray(data)) {
+      if (!data.length) return true;
+      payload = data.map(d => this.cleanRowForTable(tableName, d));
+    } else {
+      payload = this.cleanRowForTable(tableName, data);
+    }
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const { error } = await this.client.from(tableName).upsert(payload);
+        if (!error) return true;
+
+        const errMsg = error.message || error.details || error.hint || '';
+
+        // 1. Kiểm tra lỗi schema: Cột không tồn tại trên Postgres Cloud
+        const colMatch = errMsg.match(/Could not find the '([^']+)' column of '([^']+)' in the schema cache/i)
+                      || errMsg.match(/column "?([^"'\s]+)"? of relation "?([^"'\s]+)"? does not exist/i)
+                      || errMsg.match(/column '([^']+)' does not exist/i);
+
+        if (colMatch && colMatch[1]) {
+          const missingCol = colMatch[1];
+          this.addMissingColumnForTable(tableName, missingCol);
+          if (Array.isArray(payload)) {
+            payload.forEach(r => delete r[missingCol]);
+          } else {
+            delete payload[missingCol];
+          }
+          continue; // Thử lại ngay lập tức mà không có cột này
+        }
+
+        // 2. Kiểm tra lỗi kiểu dữ liệu JSON vs TEXT
+        let jsonConverted = false;
+        const convertJsonToText = (obj) => {
+          if (!obj || typeof obj !== 'object') return;
+          ['kiem_duoc', 'kiem_ketoan_bh', 'kiem_khth', 'kiem_it'].forEach(k => {
+            if (obj[k] !== undefined && typeof obj[k] === 'object' && obj[k] !== null) {
+              obj[k] = JSON.stringify(obj[k]);
+              jsonConverted = true;
+            }
+          });
+        };
+
+        if (Array.isArray(payload)) {
+          payload.forEach(convertJsonToText);
+        } else {
+          convertJsonToText(payload);
+        }
+
+        if (jsonConverted) {
+          continue; // Thử lại sau khi stringify JSON
+        }
+
+        console.warn(`Supabase upsert vào bảng '${tableName}' gặp cảnh báo (lần thử ${attempt + 1}):`, errMsg);
+        return false;
+      } catch (e) {
+        console.warn(`Lỗi ngoại lệ khi upsert vào bảng '${tableName}':`, e);
+        return false;
+      }
+    }
+    return false;
   }
 
   // Lấy URL hiện tại
@@ -188,19 +294,38 @@ class SupabaseService {
   }
 
   dischargeToDb(r) {
+    const ensureJson = (val) => {
+      if (!val) return { status: 'CO_LOI', note: '' };
+      if (typeof val === 'string') {
+        try {
+          const parsed = JSON.parse(val);
+          if (typeof parsed === 'object' && parsed !== null) return parsed;
+        } catch (e) {
+          return { status: val === 'KHONG_LOI' ? 'KHONG_LOI' : 'CO_LOI', note: '' };
+        }
+      }
+      return val;
+    };
+
+    const cleanDate = (d) => {
+      if (!d) return new Date().toISOString().slice(0, 10);
+      const str = String(d).trim();
+      return str.slice(0, 10);
+    };
+
     return {
       id: String(r.id),
-      ngay_bao_cao: r.ngayBaoCao || '',
-      ngay_ra_vien: r.ngayRaVien || null,
-      ma_kcb: r.maKCB || '',
-      ten_benh_nhan: r.tenBenhNhan || '',
-      ten_bac_si: r.tenBacSi || '',
-      phong: r.phong || '',
-      nguoi_bao_cao: r.nguoiBaoCao || '',
-      kiem_duoc: r.kiemDuoc || { status: 'CO_LOI', note: '' },
-      kiem_ketoan_bh: r.kiemKeToanBH || { status: 'CO_LOI', note: '' },
-      kiem_khth: r.kiemKHTH || { status: 'CO_LOI', note: '' },
-      kiem_it: r.kiemIT || { status: 'CO_LOI', note: '' },
+      ngay_bao_cao: cleanDate(r.ngayBaoCao),
+      ngay_ra_vien: r.ngayRaVien ? String(r.ngayRaVien).trim() : null,
+      ma_kcb: r.maKCB ? String(r.maKCB).trim() : '',
+      ten_benh_nhan: r.tenBenhNhan ? String(r.tenBenhNhan).trim() : '',
+      ten_bac_si: r.tenBacSi ? String(r.tenBacSi).trim() : '',
+      phong: r.phong ? String(r.phong).trim() : '',
+      nguoi_bao_cao: r.nguoiBaoCao ? String(r.nguoiBaoCao).trim() : '',
+      kiem_duoc: ensureJson(r.kiemDuoc),
+      kiem_ketoan_bh: ensureJson(r.kiemKeToanBH),
+      kiem_khth: ensureJson(r.kiemKHTH),
+      kiem_it: ensureJson(r.kiemIT),
       bao_cao_tinh_trang_sua_loi: r.baoCaoTinhTrangSuaLoi || '',
       chot_thong_cong: r.chotThongCong || 'CHUA',
       ngay_thong_cong: r.ngayThongCong || null,
@@ -209,6 +334,19 @@ class SupabaseService {
   }
 
   dbToDischarge(row) {
+    const parseStep = (val) => {
+      if (!val) return { status: 'CO_LOI', note: '' };
+      if (typeof val === 'object' && val !== null) return val;
+      if (typeof val === 'string') {
+        try {
+          const parsed = JSON.parse(val);
+          if (typeof parsed === 'object' && parsed !== null) return parsed;
+        } catch (e) {}
+        return { status: val === 'KHONG_LOI' ? 'KHONG_LOI' : 'CO_LOI', note: '' };
+      }
+      return { status: 'CO_LOI', note: '' };
+    };
+
     return {
       id: row.id ? String(row.id) : ('BCRV-' + Date.now().toString(36).toUpperCase()),
       ngayBaoCao: row.ngay_bao_cao || row.ngayBaoCao || row.ngaybaocao || '',
@@ -218,10 +356,10 @@ class SupabaseService {
       tenBacSi: row.ten_bac_si || row.tenBacSi || row.tenbacsi || row.bac_si || '',
       phong: row.phong || row.khoa || row.khoa_phong || row.khoaPhong || '',
       nguoiBaoCao: row.nguoi_bao_cao || row.nguoiBaoCao || '',
-      kiemDuoc: row.kiem_duoc || row.kiemDuoc || { status: 'CO_LOI', note: '' },
-      kiemKeToanBH: row.kiem_ketoan_bh || row.kiemKeToanBH || { status: 'CO_LOI', note: '' },
-      kiemKHTH: row.kiem_khth || row.kiemKHTH || { status: 'CO_LOI', note: '' },
-      kiemIT: row.kiem_it || row.kiemIT || { status: 'CO_LOI', note: '' },
+      kiemDuoc: parseStep(row.kiem_duoc || row.kiemDuoc),
+      kiemKeToanBH: parseStep(row.kiem_ketoan_bh || row.kiemKeToanBH),
+      kiemKHTH: parseStep(row.kiem_khth || row.kiemKHTH),
+      kiemIT: parseStep(row.kiem_it || row.kiemIT),
       baoCaoTinhTrangSuaLoi: row.bao_cao_tinh_trang_sua_loi || row.baoCaoTinhTrangSuaLoi || '',
       chotThongCong: row.chot_thong_cong || row.chotThongCong || 'CHUA',
       ngayThongCong: row.ngay_thong_cong || row.ngayThongCong || null,
@@ -301,11 +439,7 @@ class SupabaseService {
     if (!this.client || !record) return false;
     try {
       const dbRow = this.recordToDb(record);
-      const { error } = await this.client.from('records').upsert(dbRow);
-      if (error) {
-        console.warn('Supabase upsertRecord warning:', error.message);
-      }
-      return true;
+      return await this.robustUpsert('records', dbRow);
     } catch (e) {
       console.warn('Lỗi khi upsert record lên Supabase:', e);
       return false;
@@ -356,11 +490,7 @@ class SupabaseService {
     if (!this.client || !report) return false;
     try {
       const dbRow = this.dischargeToDb(report);
-      const { error } = await this.client.from('discharge_reports').upsert(dbRow);
-      if (error) {
-        console.warn('Supabase upsertDischargeReport warning:', error.message);
-      }
-      return true;
+      return await this.robustUpsert('discharge_reports', dbRow);
     } catch (e) {
       console.warn('Lỗi khi upsert discharge report lên Supabase:', e);
       return false;
@@ -371,13 +501,12 @@ class SupabaseService {
     if (!this.client || !Array.isArray(reportsList) || !reportsList.length) return false;
     try {
       const dbRows = reportsList.map(r => this.dischargeToDb(r));
-      const { error } = await this.client.from('discharge_reports').upsert(dbRows);
-      if (error) {
-        console.warn('Supabase upsertBatchDischargeReports warning:', error.message);
-      }
-      return true;
+      return await this.robustUpsert('discharge_reports', dbRows);
     } catch (e) {
       console.warn('Lỗi khi upsert batch discharge reports lên Supabase:', e);
+      for (const rep of reportsList) {
+        await this.upsertDischargeReport(rep);
+      }
       return false;
     }
   }
@@ -419,9 +548,7 @@ class SupabaseService {
     if (!this.client || !dept) return false;
     try {
       const dbRow = this.deptToDb(dept);
-      const { error } = await this.client.from('departments').upsert(dbRow);
-      if (error) throw error;
-      return true;
+      return await this.robustUpsert('departments', dbRow);
     } catch (e) {
       console.warn('Lỗi khi upsert department lên Supabase:', e);
       return false;
@@ -459,9 +586,7 @@ class SupabaseService {
     if (!this.client || !member) return false;
     try {
       const dbRow = this.staffToDb(member);
-      const { error } = await this.client.from('staff').upsert(dbRow);
-      if (error) throw error;
-      return true;
+      return await this.robustUpsert('staff', dbRow);
     } catch (e) {
       console.warn('Lỗi khi upsert staff lên Supabase:', e);
       return false;
@@ -494,19 +619,19 @@ class SupabaseService {
 
       // 1. Departments
       const depts = storageService.getDepartments().map(d => this.deptToDb(d));
-      if (depts.length) await this.client.from('departments').upsert(depts);
+      if (depts.length) await this.robustUpsert('departments', depts);
 
       // 2. Staff
       const staff = storageService.getStaff().map(s => this.staffToDb(s));
-      if (staff.length) await this.client.from('staff').upsert(staff);
+      if (staff.length) await this.robustUpsert('staff', staff);
 
       // 3. Records
       const records = storageService.getRecords().map(r => this.recordToDb(r));
-      if (records.length) await this.client.from('records').upsert(records);
+      if (records.length) await this.robustUpsert('records', records);
 
       // 4. Discharge Reports
       const discharge = storageService.getDischargeReports().map(r => this.dischargeToDb(r));
-      if (discharge.length) await this.client.from('discharge_reports').upsert(discharge);
+      if (discharge.length) await this.robustUpsert('discharge_reports', discharge);
 
       this.isSyncing = false;
       return { success: true, message: 'Đã đồng bộ toàn bộ dữ liệu lên Supabase Cloud thành công!' };
@@ -517,7 +642,7 @@ class SupabaseService {
     }
   }
 
-  // Đồng bộ thông minh 2 chiều (Smart 2-Way Sync): Cloud là nguồn chuẩn authoritative, loại bỏ hiện tượng hồi sinh dữ liệu đã xóa
+  // Đồng bộ thông minh 2 chiều (Smart 2-Way Sync): Không bao giờ làm mất dữ liệu vừa nhập ở Local, tự động đẩy lên Cloud
   async smartSync(storageService) {
     if (!this.client || this.isSyncing) return;
     this.isSyncing = true;
@@ -538,11 +663,10 @@ class SupabaseService {
       const dischargeTombs = getTombList('discharge');
 
       // 1. Departments (Danh mục Khoa/Phòng)
-      let localDepts = storageService.getDepartments();
+      let localDepts = storageService.getDepartments() || [];
       const cloudDepts = await this.fetchDepartments();
 
       if (cloudDepts !== null) {
-        // Dọn dẹp các khoa phòng đã bị xóa trên Cloud
         if (deptTombs.length > 0) {
           for (const tId of deptTombs) {
             if (cloudDepts.some(cd => String(cd.id) === String(tId))) {
@@ -552,19 +676,34 @@ class SupabaseService {
         }
 
         const validCloudDepts = cloudDepts.filter(cd => !storageService.isTombstoned('departments', cd.id));
-        if (validCloudDepts.length > 0) {
-          if (JSON.stringify(localDepts) !== JSON.stringify(validCloudDepts)) {
-            storageService.saveDepartments(validCloudDepts);
-            hasLocalChanges = true;
+        const deptMergedMap = new Map(validCloudDepts.map(d => [String(d.id), d]));
+        const missingDeptsOnCloud = [];
+
+        for (const ld of localDepts) {
+          if (!ld || !ld.id) continue;
+          if (storageService.isTombstoned('departments', ld.id)) continue;
+          const sId = String(ld.id);
+          if (!deptMergedMap.has(sId)) {
+            deptMergedMap.set(sId, ld);
+            missingDeptsOnCloud.push(ld);
           }
-        } else if (localDepts.length > 0) {
-          // Chỉ đẩy nếu Cloud chưa từng có gì
-          await this.client.from('departments').upsert(localDepts.map(d => this.deptToDb(d)));
+        }
+
+        if (missingDeptsOnCloud.length > 0) {
+          for (const d of missingDeptsOnCloud) {
+            await this.upsertDepartment(d);
+          }
+        }
+
+        const finalDeptsList = Array.from(deptMergedMap.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+        if (JSON.stringify(localDepts) !== JSON.stringify(finalDeptsList)) {
+          storageService.saveDepartments(finalDeptsList);
+          hasLocalChanges = true;
         }
       }
 
       // 2. Staff (Nhân viên)
-      let localStaff = storageService.getStaff();
+      let localStaff = storageService.getStaff() || [];
       const cloudStaff = await this.fetchStaff();
 
       if (cloudStaff !== null) {
@@ -577,22 +716,41 @@ class SupabaseService {
         }
 
         const validCloudStaff = cloudStaff.filter(cs => !storageService.isTombstoned('staff', cs.id));
-        if (validCloudStaff.length > 0) {
-          if (JSON.stringify(localStaff) !== JSON.stringify(validCloudStaff)) {
-            storageService.saveStaff(validCloudStaff);
-            hasLocalChanges = true;
+        const staffMergedMap = new Map(validCloudStaff.map(s => [String(s.id), s]));
+        const missingStaffOnCloud = [];
+
+        for (const ls of localStaff) {
+          if (!ls || !ls.id) continue;
+          if (storageService.isTombstoned('staff', ls.id)) continue;
+          const sId = String(ls.id);
+          if (!staffMergedMap.has(sId)) {
+            staffMergedMap.set(sId, ls);
+            missingStaffOnCloud.push(ls);
+          } else {
+            // Giữ mật khẩu và cập nhật mới nhất
+            const cs = staffMergedMap.get(sId);
+            staffMergedMap.set(sId, { ...cs, ...ls });
           }
-        } else if (localStaff.length > 0) {
-          await this.client.from('staff').upsert(localStaff.map(s => this.staffToDb(s)));
+        }
+
+        if (missingStaffOnCloud.length > 0) {
+          for (const s of missingStaffOnCloud) {
+            await this.upsertStaff(s);
+          }
+        }
+
+        const finalStaffList = Array.from(staffMergedMap.values());
+        if (JSON.stringify(localStaff) !== JSON.stringify(finalStaffList)) {
+          storageService.saveStaff(finalStaffList);
+          hasLocalChanges = true;
         }
       }
 
       // 3. Records (Bản ghi lỗi HSBA)
-      let localRecords = storageService.getRecords();
+      let localRecords = storageService.getRecords() || [];
       const cloudRecords = await this.fetchRecords();
 
       if (cloudRecords !== null) {
-        // Xóa các bản ghi đã bị xóa khỏi Cloud nếu Cloud còn sót
         if (recordTombs.length > 0) {
           for (const tId of recordTombs) {
             if (cloudRecords.some(cr => String(cr.id) === String(tId) || String(cr.maKCB) === String(tId))) {
@@ -601,35 +759,44 @@ class SupabaseService {
           }
         }
 
-        // Lọc bỏ tombstone khỏi Cloud dataset
         const validCloudRecords = cloudRecords.filter(cr => 
           !storageService.isTombstoned('records', cr.id) && !storageService.isTombstoned('records', cr.maKCB)
         );
 
-        // CLOUD LÀ SOURCE OF TRUTH:
-        // Cập nhật dữ liệu cục bộ theo Cloud, KHÔNG tự động re-upload các bản ghi đã bị xóa từ máy khác
-        let recordsChanged = false;
-        if (localRecords.length !== validCloudRecords.length) {
-          recordsChanged = true;
-        } else {
-          const localMap = new Map(localRecords.map(r => [String(r.id), r]));
-          for (const cr of validCloudRecords) {
-            const lr = localMap.get(String(cr.id));
-            if (!lr || JSON.stringify(lr) !== JSON.stringify(cr)) {
-              recordsChanged = true;
-              break;
-            }
+        const recordMergedMap = new Map(validCloudRecords.map(r => [String(r.id), r]));
+        const missingRecordsOnCloud = [];
+
+        for (const lr of localRecords) {
+          if (!lr || !lr.id) continue;
+          if (storageService.isTombstoned('records', lr.id) || (lr.maKCB && storageService.isTombstoned('records', lr.maKCB))) {
+            continue;
+          }
+          const sId = String(lr.id);
+          if (!recordMergedMap.has(sId)) {
+            // Bản ghi có ở Local nhưng chưa lên Cloud -> Giữ lại và tự động đẩy lên Cloud
+            recordMergedMap.set(sId, lr);
+            missingRecordsOnCloud.push(lr);
+          } else {
+            const cr = recordMergedMap.get(sId);
+            recordMergedMap.set(sId, { ...cr, ...lr });
           }
         }
 
-        if (recordsChanged) {
-          storageService.saveRecords(validCloudRecords);
+        if (missingRecordsOnCloud.length > 0) {
+          for (const rec of missingRecordsOnCloud) {
+            await this.upsertRecord(rec);
+          }
+        }
+
+        const finalRecordsList = Array.from(recordMergedMap.values());
+        if (JSON.stringify(localRecords) !== JSON.stringify(finalRecordsList)) {
+          storageService.saveRecords(finalRecordsList);
           hasLocalChanges = true;
         }
       }
 
       // 4. Discharge Reports (Báo cáo ra viện)
-      let localDischarge = storageService.getDischargeReports();
+      let localDischarge = storageService.getDischargeReports() || [];
       const cloudDischarge = await this.fetchDischargeReports();
 
       if (cloudDischarge !== null) {
@@ -645,22 +812,37 @@ class SupabaseService {
           !storageService.isTombstoned('discharge', cd.id) && !storageService.isTombstoned('discharge', cd.maKCB)
         );
 
-        let dischargeChanged = false;
-        if (localDischarge.length !== validCloudDischarge.length) {
-          dischargeChanged = true;
-        } else {
-          const localDischargeMap = new Map(localDischarge.map(r => [String(r.id), r]));
-          for (const cd of validCloudDischarge) {
-            const ld = localDischargeMap.get(String(cd.id));
-            if (!ld || JSON.stringify(ld) !== JSON.stringify(cd)) {
-              dischargeChanged = true;
-              break;
-            }
+        const dischargeMergedMap = new Map(validCloudDischarge.map(r => [String(r.id), r]));
+        const missingDischargeOnCloud = [];
+
+        for (const ld of localDischarge) {
+          if (!ld || !ld.id) continue;
+          if (storageService.isTombstoned('discharge', ld.id) || (ld.maKCB && storageService.isTombstoned('discharge', ld.maKCB))) {
+            continue;
+          }
+          const sId = String(ld.id);
+          if (!dischargeMergedMap.has(sId)) {
+            // Ca ra viện vừa nhập ở Local chưa có trên Cloud -> Tuyệt đối không xóa! Thêm vào map và đẩy lên Cloud
+            dischargeMergedMap.set(sId, ld);
+            missingDischargeOnCloud.push(ld);
+          } else {
+            const cd = dischargeMergedMap.get(sId);
+            dischargeMergedMap.set(sId, { ...cd, ...ld });
           }
         }
 
-        if (dischargeChanged) {
-          storageService.saveDischargeReports(validCloudDischarge);
+        if (missingDischargeOnCloud.length > 0) {
+          console.log(`📤 Đang tự động đồng bộ ${missingDischargeOnCloud.length} ca ra viện mới lên Supabase Cloud...`);
+          for (const rep of missingDischargeOnCloud) {
+            await this.upsertDischargeReport(rep);
+          }
+        }
+
+        const finalDischargeList = Array.from(dischargeMergedMap.values());
+        finalDischargeList.sort((a, b) => (b.ngayBaoCao || '').localeCompare(a.ngayBaoCao || '') || (b.id || '').localeCompare(a.id || ''));
+
+        if (JSON.stringify(localDischarge) !== JSON.stringify(finalDischargeList)) {
+          storageService.saveDischargeReports(finalDischargeList);
           hasLocalChanges = true;
         }
       }

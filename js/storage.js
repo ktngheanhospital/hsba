@@ -814,6 +814,9 @@ export class StorageService {
 
     const autoKetoan = this.evaluateKetoanStatusFromRecords(reportData.maKCB);
 
+    const currentUser = this.getCurrentUser();
+    const defaultAuthor = currentUser ? currentUser.name : 'Nhân viên';
+
     const newReport = {
       id: newId,
       ngayBaoCao: reportDate,
@@ -822,9 +825,11 @@ export class StorageService {
       tenBenhNhan: reportData.tenBenhNhan || '',
       tenBacSi: reportData.tenBacSi || '',
       phong: reportData.phong || this.getActiveDepartment(),
+      nguoiBaoCao: reportData.nguoiBaoCao || defaultAuthor,
       kiemDuoc: reportData.kiemDuoc || { status: 'CO_LOI', note: '' },
       kiemKeToanBH: (reportData.kiemKeToanBH && reportData.kiemKeToanBH.status !== 'CO_LOI') ? reportData.kiemKeToanBH : autoKetoan,
       kiemKHTH: reportData.kiemKHTH || { status: 'CO_LOI', note: '' },
+      kiemIT: reportData.kiemIT || { status: 'CO_LOI', note: '' },
       baoCaoTinhTrangSuaLoi: reportData.baoCaoTinhTrangSuaLoi || '',
       chotThongCong: reportData.chotThongCong || 'CHUA',
       ngayThongCong: reportData.ngayThongCong || null,
@@ -843,6 +848,8 @@ export class StorageService {
     const currentReports = this.getDischargeReports();
     const activeDept = this.getActiveDepartment();
     const today = new Date().toISOString().slice(0, 10);
+    const currentUser = this.getCurrentUser();
+    const defaultAuthor = currentUser ? currentUser.name : 'Nhân viên';
 
     const createdList = [];
     reportsList.forEach((item, idx) => {
@@ -876,13 +883,15 @@ export class StorageService {
           tenBenhNhan: item.tenBenhNhan.trim(),
           tenBacSi: (item.tenBacSi || '').trim(),
           phong: item.phong || activeDept,
-          kiemDuoc: { status: 'CO_LOI', note: '' },
+          nguoiBaoCao: item.nguoiBaoCao || defaultAuthor,
+          kiemDuoc: item.kiemDuoc || { status: 'CO_LOI', note: '' },
           kiemKeToanBH: autoKetoan,
-          kiemKHTH: { status: 'CO_LOI', note: '' },
-          baoCaoTinhTrangSuaLoi: '',
-          chotThongCong: 'CHUA',
-          ngayThongCong: null,
-          nguoiThongCong: null
+          kiemKHTH: item.kiemKHTH || { status: 'CO_LOI', note: '' },
+          kiemIT: item.kiemIT || { status: 'CO_LOI', note: '' },
+          baoCaoTinhTrangSuaLoi: item.baoCaoTinhTrangSuaLoi || '',
+          chotThongCong: item.chotThongCong || 'CHUA',
+          ngayThongCong: item.ngayThongCong || null,
+          nguoiThongCong: item.nguoiThongCong || null
         };
         currentReports.unshift(newRep);
         createdList.push(newRep);

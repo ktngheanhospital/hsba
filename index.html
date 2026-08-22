@@ -1395,6 +1395,95 @@
                     </div>
                   </div>
                 </div>
+
+                <!-- Card Script SQL Schema Supabase -->
+                <div class="soft-card-panel" style="grid-column: 1 / -1;">
+                  <div class="panel-header-strip flex-between">
+                    <h4 class="panel-header-title">📋 Cấu trúc Bảng Supabase SQL (Schema Chuẩn)</h4>
+                    <button type="button" class="btn btn-sm btn-outline" id="btn-copy-supabase-sql">
+                      <span>📋 Sao chép toàn bộ SQL</span>
+                    </button>
+                  </div>
+                  <div class="panel-body-area">
+                    <p class="text-xs text-muted" style="margin-bottom: 10px;">
+                      Dán đoạn SQL này vào mục <strong>SQL Editor</strong> trên Supabase Dashboard để tự động tạo đầy đủ bảng <code>departments</code>, <code>staff</code>, <code>records</code> và <code>discharge_reports</code>:
+                    </p>
+                    <pre id="supabase-sql-code" style="background: #1e293b; color: #f8fafc; padding: 14px; border-radius: 8px; font-size: 11px; line-height: 1.5; max-height: 220px; overflow-y: auto; font-family: monospace;">-- 1. Bảng danh mục Khoa/Phòng
+CREATE TABLE IF NOT EXISTS public.departments (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  code TEXT,
+  "order" INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 2. Bảng Nhân sự & Tài khoản
+CREATE TABLE IF NOT EXISTS public.staff (
+  id TEXT PRIMARY KEY,
+  username TEXT,
+  password TEXT DEFAULT '123',
+  name TEXT NOT NULL,
+  department TEXT,
+  position TEXT,
+  phone TEXT,
+  zalo_id TEXT,
+  default_role TEXT DEFAULT 'NHOM_2',
+  avatar_emoji TEXT DEFAULT '👨‍⚕️',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 3. Bảng Lỗi HSBA Rà soát
+CREATE TABLE IF NOT EXISTS public.records (
+  id TEXT PRIMARY KEY,
+  ma_kcb TEXT,
+  ten_benh_nhan TEXT,
+  khoa_phong TEXT,
+  nguoi_chi_dinh TEXT,
+  ngay_vao_khoa DATE,
+  ngay_kiem_ho_so DATE,
+  thoi_gian_chi_dinh_yl TIMESTAMP,
+  dien_giai_loi TEXT,
+  muc_do_loi TEXT DEFAULT 'Nhắc nhở',
+  trang_thai_loi TEXT DEFAULT 'CHƯA SỬA',
+  y_kien_nguoi_sua TEXT,
+  nguoi_kiem_tra TEXT,
+  so_lan_gui_zalo INTEGER DEFAULT 0,
+  thoi_gian_gui_zalo_gan_nhat TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 4. Bảng Báo cáo & Chốt Ra viện Hàng ngày
+CREATE TABLE IF NOT EXISTS public.discharge_reports (
+  id TEXT PRIMARY KEY,
+  ngay_bao_cao DATE,
+  ngay_ra_vien TEXT,
+  ma_kcb TEXT,
+  ten_benh_nhan TEXT,
+  ten_bac_si TEXT,
+  phong TEXT,
+  nguoi_bao_cao TEXT,
+  kiem_duoc JSONB DEFAULT '{"status":"CO_LOI","note":""}'::jsonb,
+  kiem_ketoan_bh JSONB DEFAULT '{"status":"CO_LOI","note":""}'::jsonb,
+  kiem_khth JSONB DEFAULT '{"status":"CO_LOI","note":""}'::jsonb,
+  kiem_it JSONB DEFAULT '{"status":"CO_LOI","note":""}'::jsonb,
+  bao_cao_tinh_trang_sua_loi TEXT,
+  chot_thong_cong TEXT DEFAULT 'CHUA',
+  ngay_thong_cong TIMESTAMPTZ,
+  nguoi_thong_cong TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Bổ sung cột còn thiếu (Dành cho Database đã tạo từ trước):
+ALTER TABLE IF EXISTS public.discharge_reports ADD COLUMN IF NOT EXISTS ngay_ra_vien TEXT;
+ALTER TABLE IF EXISTS public.discharge_reports ADD COLUMN IF NOT EXISTS kiem_it JSONB DEFAULT '{"status":"CO_LOI","note":""}'::jsonb;
+ALTER TABLE IF EXISTS public.discharge_reports ADD COLUMN IF NOT EXISTS nguoi_bao_cao TEXT;
+ALTER TABLE IF EXISTS public.staff ADD COLUMN IF NOT EXISTS username TEXT;
+ALTER TABLE IF EXISTS public.staff ADD COLUMN IF NOT EXISTS password TEXT DEFAULT '123';
+
+-- Kích hoạt Realtime cho toàn bộ 4 bảng
+ALTER PUBLICATION supabase_realtime ADD TABLE departments, staff, records, discharge_reports;</pre>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
