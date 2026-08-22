@@ -219,8 +219,10 @@ class NotificationService {
 
   // Gửi Push Notification cho 1 bản ghi lỗi tới bác sĩ/nhân viên phụ trách
   sendPushNotification(recordId, isAuto = false, customReason = '') {
+    if (storage.isTombstoned('records', recordId)) return { success: false, message: 'Hồ sơ đã bị xóa!' };
     const record = storage.getRecords().find(r => r.id === recordId);
     if (!record) return { success: false, message: 'Không tìm thấy hồ sơ lỗi!' };
+    if (record.maKCB && storage.isTombstoned('records', record.maKCB)) return { success: false, message: 'Hồ sơ đã bị xóa!' };
 
     if (record.trangThaiLoi === 'ĐÃ XONG' || record.trangThaiKiemDuyet === 'ĐÃ SỬA' || record.chotRaVien) {
       return { success: false, message: 'Hồ sơ đã hoàn thành hoặc đã chốt ra viện, không cần gửi thông báo đẩy!' };
@@ -737,6 +739,9 @@ class NotificationService {
     let autoSentCount = 0;
 
     records.forEach(record => {
+      // 0. Bỏ qua bản ghi đã bị xóa (Tombstoned)
+      if (storage.isTombstoned('records', record.id) || (record.maKCB && storage.isTombstoned('records', record.maKCB))) return;
+
       // 1. Bỏ qua các hồ sơ đã sửa xong hoặc đã chốt ra viện
       const isResolved = record.trangThaiLoi === 'ĐÃ XONG' || record.trangThaiKiemDuyet === 'ĐÃ SỬA' || record.chotRaVien;
       if (isResolved) return;

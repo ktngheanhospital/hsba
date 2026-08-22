@@ -95,9 +95,8 @@ export class StorageService {
     const isInit = localStorage.getItem(STORAGE_KEYS.INITIALIZED);
     if (!isInit) {
       this.resetToDefaults();
-    } else {
-      this.cleanMockData();
     }
+    this.cleanMockData();
 
     // Tự động đồng bộ với Supabase Cloud Database & Kích hoạt Realtime
     setTimeout(() => {
@@ -141,6 +140,8 @@ export class StorageService {
       }
 
       // 2. Dọn dẹp bản ghi rác/test cũ nếu còn lưu trong localStorage của trình duyệt
+      this.addTombstone('records', 'REC-1006');
+      this.addTombstone('records', 'test');
       const recordsJson = localStorage.getItem(STORAGE_KEYS.RECORDS);
       if (recordsJson) {
         try {
