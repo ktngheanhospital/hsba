@@ -235,7 +235,12 @@ class NotificationService {
     const { title, message, staffName, deptName } = this.formatPushContent(record, staff);
 
     const now = new Date();
-    const nowStr = now.toISOString().replace('T', ' ').substring(0, 16);
+    const nowIso = now.toISOString();
+    const nowDisplayStr = now.getFullYear() + '-' + 
+      String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+      String(now.getDate()).padStart(2, '0') + ' ' + 
+      String(now.getHours()).padStart(2, '0') + ':' + 
+      String(now.getMinutes()).padStart(2, '0');
     const notifId = 'NOTIF-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
 
     // 1. Tạo Notification Model trong Hòm thư Thông báo (Inbox)
@@ -253,8 +258,8 @@ class NotificationService {
       title: title,
       body: message,
       trangThaiLoi: record.trangThaiLoi || 'CHƯA SỬA',
-      timestamp: now.toISOString(),
-      timeFormatted: nowStr,
+      timestamp: nowIso,
+      timeFormatted: nowDisplayStr,
       isRead: false,
       isAuto: isAuto,
       customReason: customReason || (isAuto ? 'Nhắc nhở tự động định kỳ' : 'Thông báo tức thời')
@@ -284,7 +289,8 @@ class NotificationService {
     const pushHistory = record.pushHistory || [];
     pushHistory.unshift({
       id: notifId,
-      time: nowStr,
+      time: nowDisplayStr,
+      timestamp: nowIso,
       recipientName: staffName,
       targetDept: deptName,
       isAuto: isAuto,
@@ -293,7 +299,8 @@ class NotificationService {
     });
 
     const updates = {
-      lastPushSentAt: nowStr,
+      lastPushSentAt: nowIso,
+      lastZaloSentAt: nowIso,
       pushSentCount: (record.pushSentCount || 0) + 1,
       pushHistory: pushHistory
     };
@@ -591,6 +598,23 @@ class NotificationService {
     this.sendTestPush();
   }
 
+  // Hàm phân tích thời gian an toàn đa định dạng (ISO, Local String, Timestamp)
+  parseTimestamp(val) {
+    if (!val) return null;
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      // Thử parse trực tiếp ISO hoặc date string
+      let parsed = Date.parse(trimmed);
+      if (!isNaN(parsed)) return parsed;
+      // Thử chuẩn hóa định dạng 'YYYY-MM-DD HH:mm'
+      const isoStandard = trimmed.replace(' ', 'T');
+      parsed = Date.parse(isoStandard);
+      if (!isNaN(parsed)) return parsed;
+    }
+    return null;
+  }
+
   // Khởi động Bộ hẹn giờ tự động quét và đẩy thông báo định kỳ
   initAutoScheduler() {
     if (this.timerId) {
@@ -601,55 +625,83 @@ class NotificationService {
     const config = this.getConfig();
     if (!config.enabled || !config.autoReminder) return;
 
-    // Kiểm tra định kỳ mỗi 60 giây
+    // Kiểm tra định kỳ mỗi 60 giây xem có ca nào đã đến hạn chu kỳ nhắc nhở
     this.timerId = setInterval(() => {
-      this.checkAndDispatchAutoReminders();
+      this.checkAndDispatchAutoReminders(false);
     }, 60 * 1000);
 
-    // Kích hoạt quét nhanh sau 5 giây khi mở app
+    // Quét nhẹ nhàng sau khi mở app (không ép buộc gửi nếu chưa tới hạn)
     setTimeout(() => {
-      this.checkAndDispatchAutoReminders();
+      this.checkAndDispatchAutoReminders(false);
     }, 5000);
   }
 
   // Quét các lỗi chưa hoàn thành và kiểm tra xem đã qua chu kỳ cần nhắc chưa
-  checkAndDispatchAutoReminders() {
+  checkAndDispatchAutoReminders(forceAll = false) {
     const config = this.getConfig();
-    if (!config.enabled || !config.autoReminder) return;
+    if (!config.enabled || (!config.autoReminder && !forceAll)) return 0;
 
-    const intervalMs = (config.reminderIntervalHours || 2) * 60 * 60 * 1000;
+    const intervalHours = parseFloat(config.reminderIntervalHours) || 2;
+    const intervalMs = Math.max(1, intervalHours) * 60 * 60 * 1000;
     const now = Date.now();
     const records = storage.getRecords();
 
     let autoSentCount = 0;
 
     records.forEach(record => {
+      // 1. Bỏ qua các hồ sơ đã sửa xong hoặc đã chốt ra viện
       const isResolved = record.trangThaiLoi === 'ĐÃ XONG' || record.trangThaiKiemDuyet === 'ĐÃ SỬA' || record.chotRaVien;
       if (isResolved) return;
 
+      // 2. Bỏ qua hồ sơ không có bác sĩ/nhân viên chỉ định
+      if (!record.nguoiChiDinh) return;
+
       let needSend = false;
-      if (!record.lastPushSentAt && !record.lastZaloSentAt) {
+
+      if (forceAll) {
         needSend = true;
       } else {
-        const lastTimeStr = record.lastPushSentAt || record.lastZaloSentAt;
-        const lastSentTime = new Date(lastTimeStr.replace(' ', 'T')).getTime();
-        if (now - lastSentTime >= intervalMs) {
-          needSend = true;
+        // Tìm mốc thời gian gần nhất: lần gửi push gần nhất, lần gửi zalo gần nhất, hoặc lúc tạo bản ghi
+        const lastSentRaw = record.lastPushSentAt || record.lastZaloSentAt;
+        const lastSentTime = this.parseTimestamp(lastSentRaw);
+
+        if (lastSentTime) {
+          const elapsed = now - lastSentTime;
+          if (elapsed >= intervalMs) {
+            needSend = true;
+          }
+        } else {
+          // Chưa từng gửi push: kiểm tra thời điểm tạo lỗi
+          const createdTime = this.parseTimestamp(record.ngayTao);
+          if (createdTime) {
+            const elapsedSinceCreation = now - createdTime;
+            if (elapsedSinceCreation >= intervalMs) {
+              needSend = true;
+            } else {
+              // Vừa mới tạo chưa đủ thời gian chu kỳ: cập nhật lastPushSentAt để không bắn nhầm
+              storage.updateRecord(record.id, { lastPushSentAt: new Date(createdTime).toISOString() });
+            }
+          } else {
+            // Không có thông tin ngày tạo: gán mốc hiện tại để bắt đầu tính chu kỳ từ bây giờ
+            storage.updateRecord(record.id, { lastPushSentAt: new Date().toISOString() });
+          }
         }
       }
 
       if (needSend) {
-        this.sendPushNotification(record.id, true, `Nhắc nhở tự động định kỳ (${config.reminderIntervalHours}h/lần)`);
+        this.sendPushNotification(record.id, true, `Nhắc nhở tự động định kỳ (${intervalHours}h/lần)`);
         autoSentCount++;
       }
     });
 
     if (autoSentCount > 0) {
-      console.log(`[Push Notification] Đã tự động bắn ${autoSentCount} thông báo đẩy định kỳ.`);
+      console.log(`[Push Notification] Đã tự động bắn ${autoSentCount} thông báo đẩy định kỳ (chu kỳ ${intervalHours}h).`);
       if (window.hsbaApp && typeof window.hsbaApp.refreshAllViews === 'function') {
         window.hsbaApp.refreshAllViews();
       }
     }
+
+    return autoSentCount;
   }
 }
 

@@ -475,44 +475,66 @@
             </div>
           </div>
 
-          <!-- BỘ LỌC THỐNG KÊ THEO NGÀY, THÁNG, NĂM, TẤT CẢ -->
-          <div class="dashboard-timefilter-bar">
-            <div class="timefilter-left-col">
-              <span class="timefilter-title-label">⏱️ Lọc Thống Kê Theo:</span>
-              <div class="btn-group-segmented" id="dash-time-period-group">
-                <button class="btn-seg active" id="btn-time-day" onclick="window.hsbaApp.setDashboardTimeMode('DAY')">📅 Theo Ngày</button>
-                <button class="btn-seg" id="btn-time-month" onclick="window.hsbaApp.setDashboardTimeMode('MONTH')">📆 Theo Tháng</button>
-                <button class="btn-seg" id="btn-time-year" onclick="window.hsbaApp.setDashboardTimeMode('YEAR')">🗓️ Theo Năm</button>
-                <button class="btn-seg" id="btn-time-all" onclick="window.hsbaApp.setDashboardTimeMode('ALL')">🌐 Tất cả thời gian</button>
+          <!-- BỘ LỌC THỐNG KÊ DASHBOARD: THEO CÁ NHÂN NGƯỜI ĐĂNG NHẬP / TOÀN VIỆN & THỜI GIAN -->
+          <div class="dashboard-timefilter-bar" id="dashboard-filter-panel">
+            <!-- 1. DÒNG LỌC PHẠM VI NGƯỜI DÙNG: CÁ NHÂN (CHÍNH TÔI) / TOÀN VIỆN -->
+            <div class="dashboard-user-filter-strip" id="dash-user-filter-strip">
+              <div class="user-scope-info">
+                <span class="user-scope-icon">👤</span>
+                <div class="user-scope-text">
+                  <span class="user-scope-title">Phạm vi thống kê:</span>
+                  <strong id="dash-user-scope-label">Chính tôi (Đang tải...)</strong>
+                </div>
+              </div>
+              <div class="user-scope-toggle-group">
+                <button type="button" class="btn-scope-toggle active" id="btn-scope-mine" onclick="window.hsbaApp.setDashboardUserScope('MINE')">
+                  👤 Cá nhân tôi
+                </button>
+                <button type="button" class="btn-scope-toggle" id="btn-scope-all" onclick="window.hsbaApp.setDashboardUserScope('ALL')">
+                  🏥 Toàn viện
+                </button>
               </div>
             </div>
 
-            <!-- Dynamic Pickers & Filter Active Status -->
-            <div class="timefilter-right-col">
-              <!-- Day selector -->
-              <div id="dash-time-day-picker-box" class="time-picker-item" style="display: flex; gap: 6px; align-items: center;">
-                <input type="date" id="dash-time-input-day" class="form-control form-control-sm" style="width: 145px; height: 32px; font-size: 0.82rem;" onchange="window.hsbaApp.onDashboardTimeInputChange()" />
-                <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.setDashboardTimeToToday()">Hôm nay</button>
-                <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.setDashboardTimeToYesterday()">Hôm qua</button>
+            <!-- 2. DÒNG LỌC THỜI GIAN (GỌN GÀNG, KHÔNG LỆCH KHỎI KHUNG TRÊN MOBILE) -->
+            <div class="dashboard-timefilter-inner">
+              <div class="timefilter-left-col">
+                <span class="timefilter-title-label">⏱️ Thời gian:</span>
+                <div class="btn-group-segmented" id="dash-time-period-group">
+                  <button class="btn-seg active" id="btn-time-day" onclick="window.hsbaApp.setDashboardTimeMode('DAY')">📅 Theo Ngày</button>
+                  <button class="btn-seg" id="btn-time-month" onclick="window.hsbaApp.setDashboardTimeMode('MONTH')">📆 Theo Tháng</button>
+                  <button class="btn-seg" id="btn-time-year" onclick="window.hsbaApp.setDashboardTimeMode('YEAR')">🗓️ Theo Năm</button>
+                  <button class="btn-seg" id="btn-time-all" onclick="window.hsbaApp.setDashboardTimeMode('ALL')">🌐 Tất cả</button>
+                </div>
               </div>
 
-              <!-- Month selector -->
-              <div id="dash-time-month-picker-box" class="time-picker-item" style="display: none; gap: 6px; align-items: center;">
-                <input type="month" id="dash-time-input-month" class="form-control form-control-sm" style="width: 145px; height: 32px; font-size: 0.82rem;" onchange="window.hsbaApp.onDashboardTimeInputChange()" />
-                <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.setDashboardTimeToThisMonth()">Tháng này</button>
-              </div>
+              <!-- Dynamic Pickers & Filter Active Status -->
+              <div class="timefilter-right-col">
+                <!-- Day selector -->
+                <div id="dash-time-day-picker-box" class="time-picker-item" style="display: flex; gap: 6px; align-items: center;">
+                  <input type="date" id="dash-time-input-day" class="form-control form-control-sm" onchange="window.hsbaApp.onDashboardTimeInputChange()" />
+                  <button type="button" class="btn btn-xs btn-outline btn-quick-day" onclick="window.hsbaApp.setDashboardTimeToToday()">Hôm nay</button>
+                  <button type="button" class="btn btn-xs btn-outline btn-quick-day" onclick="window.hsbaApp.setDashboardTimeToYesterday()">Hôm qua</button>
+                </div>
 
-              <!-- Year selector -->
-              <div id="dash-time-year-picker-box" class="time-picker-item" style="display: none; gap: 6px; align-items: center;">
-                <select id="dash-time-input-year" class="form-control form-control-sm" style="width: 110px; height: 32px; font-size: 0.82rem;" onchange="window.hsbaApp.onDashboardTimeInputChange()">
-                  <!-- Populated by JS -->
-                </select>
-                <button class="btn btn-xs btn-outline" onclick="window.hsbaApp.setDashboardTimeToThisYear()">Năm nay</button>
-              </div>
+                <!-- Month selector -->
+                <div id="dash-time-month-picker-box" class="time-picker-item" style="display: none; gap: 6px; align-items: center;">
+                  <input type="month" id="dash-time-input-month" class="form-control form-control-sm" onchange="window.hsbaApp.onDashboardTimeInputChange()" />
+                  <button type="button" class="btn btn-xs btn-outline btn-quick-day" onclick="window.hsbaApp.setDashboardTimeToThisMonth()">Tháng này</button>
+                </div>
 
-              <div class="timefilter-badge-status" id="dash-time-filter-indicator">
-                <span class="pulse-dot"></span>
-                <span>Đang hiển thị: <strong id="dash-time-filter-text">Hôm nay (21/08/2026)</strong></span>
+                <!-- Year selector -->
+                <div id="dash-time-year-picker-box" class="time-picker-item" style="display: none; gap: 6px; align-items: center;">
+                  <select id="dash-time-input-year" class="form-control form-control-sm" onchange="window.hsbaApp.onDashboardTimeInputChange()">
+                    <!-- Populated by JS -->
+                  </select>
+                  <button type="button" class="btn btn-xs btn-outline btn-quick-day" onclick="window.hsbaApp.setDashboardTimeToThisYear()">Năm nay</button>
+                </div>
+
+                <div class="timefilter-badge-status" id="dash-time-filter-indicator">
+                  <span class="pulse-dot"></span>
+                  <span>Đang xem: <strong id="dash-time-filter-text">Hôm nay (21/08/2026)</strong></span>
+                </div>
               </div>
             </div>
           </div>
@@ -893,12 +915,16 @@
                       </div>
 
                       <div class="form-unit-group">
-                        <label class="form-unit-label">Chu kỳ nhắc lại định kỳ (giờ):</label>
+                        <label class="form-unit-label">Chu kỳ nhắc lại định kỳ:</label>
                         <select id="zalo-cfg-interval" class="soft-form-control">
+                          <option value="0.25">15 phút / lần</option>
+                          <option value="0.5">30 phút / lần</option>
                           <option value="1">1 giờ / lần</option>
                           <option value="2" selected>2 giờ / lần (Mặc định)</option>
-                          <option value="3">3 giờ / lần</option>
                           <option value="4">4 giờ / lần</option>
+                          <option value="8">8 giờ / lần</option>
+                          <option value="12">12 giờ / lần</option>
+                          <option value="24">24 giờ (1 ngày) / lần</option>
                         </select>
                       </div>
 

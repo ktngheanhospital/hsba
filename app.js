@@ -71,11 +71,14 @@ class App {
     this.sortBy = 'ngayCapNhat';
     this.sortOrder = 'desc';
 
-    // Dashboard State & Time Filtering
+    // Dashboard State & Time / Scope Filtering
     this.dashboardConditionFilter = 'ALL'; // 'ALL' | 'DK1' | 'DK2'
     this.violatorViewMode = 'DOCTOR'; // 'DOCTOR' | 'DEPT'
     this.expandedViolators = new Set();
     this.dashboardStats = null;
+    
+    // Lọc theo người dùng đăng nhập trên điện thoại: mặc định 'MINE' trên mobile, 'ALL' trên desktop
+    this.dashboardUserScope = (window.innerWidth <= 768) ? 'MINE' : 'ALL'; // 'MINE' | 'ALL'
 
     // Time Filtering (Theo Ngày, Tháng, Năm, Tất cả)
     this.dashboardTimeMode = 'DAY'; // 'DAY' | 'MONTH' | 'YEAR' | 'ALL'
@@ -1062,55 +1065,63 @@ class App {
       }).join('');
     }
 
-    // 2. MOBILE CARDS
+    // 2. MOBILE CARDS (DẠNG THẺ NGANG TINH TẾ & NHẸ NHÀNG)
     if (cardsContainer) {
+      const canDeleteRecord = storage.canAddRecord() || storage.isAdmin();
+
       cardsContainer.innerHTML = pagedRecords.map((r) => {
         const isUnresolved = (r.trangThaiLoi !== 'ĐÃ XONG' && r.trangThaiKiemDuyet !== 'ĐÃ SỬA' && !r.chotRaVien);
 
         return `
-          <div class="mobile-error-card ${isUnresolved ? 'card-unresolved' : ''}">
-            <div class="card-top-bar">
-              <div class="card-patient-info">
+          <div class="patient-h-card ${isUnresolved ? 'h-card-unresolved' : ''}" onclick="window.hsbaApp.modalController.openEditErrorModal('${r.id}')" title="Bấm vào để xem & chỉnh sửa chi tiết hồ sơ">
+            <!-- Header: Mã KCB, Tên BN, Mức độ lỗi -->
+            <div class="h-card-header">
+              <div class="h-card-left-group">
                 <span class="card-ma-kcb">${escapeHtml(r.maKCB)}</span>
-                <h4 class="card-patient-name">${escapeHtml(r.tenBenhNhan)}</h4>
+                <span class="h-card-name">${escapeHtml(r.tenBenhNhan)}</span>
               </div>
-              <div class="card-badges">
+              <div class="h-card-badges">
                 ${getMucDoLoiBadge(r.mucDoLoi || r.mucDoCanhBao || r.trangThaiKiemDuyet)}
               </div>
             </div>
 
-            <div class="card-meta-grid">
-              <div><span class="meta-label">🏥 Khoa:</span> <strong>${escapeHtml(r.khoaPhong)}</strong></div>
-              <div><span class="meta-label">👤 Bác sĩ:</span> <strong>${escapeHtml(r.nguoiChiDinh || '---')}</strong></div>
-              <div><span class="meta-label">📅 Vào khoa:</span> <strong>${formatDateVN(r.ngayVaoKhoa)}</strong></div>
-              <div><span class="meta-label">🔍 Kiểm HS:</span> <strong>${formatDateVN(r.ngayKiemHoSo)}</strong></div>
-              <div class="grid-col-full"><span class="meta-label">⏰ Y lệnh:</span> <strong>${escapeHtml(r.thoiGianChiDinhYL || '---')}</strong></div>
+            <!-- Meta row: Khoa, BS, Y lệnh / Kiểm HS -->
+            <div class="h-card-meta">
+              <span class="h-meta-item" title="Khoa / Phòng">🏥 <strong>${escapeHtml(r.khoaPhong)}</strong></span>
+              <span class="h-meta-item" title="Bác sĩ / Người ra y lệnh">👤 ${escapeHtml(r.nguoiChiDinh || '---')}</span>
+              <span class="h-meta-item" title="Thời gian y lệnh">⏰ ${escapeHtml(r.thoiGianChiDinhYL || formatDateVN(r.ngayKiemHoSo))}</span>
             </div>
 
-            <div class="card-error-body">
-              <div class="card-error-title">⚠️ Diễn giải sai sót:</div>
-              <p class="card-error-desc">${escapeHtml(r.dienGiaiLoi)}</p>
-              ${r.yKienNguoiSua ? `
-                <div class="card-response-box">
-                  <strong>💬 Ý kiến người sửa:</strong> ${escapeHtml(r.yKienNguoiSua)}
-                </div>
-              ` : ''}
+            <!-- Diễn giải lỗi compact -->
+            <div class="h-card-desc">
+              <span class="h-desc-icon">⚠️</span>
+              <span class="h-desc-text" title="${escapeHtml(r.dienGiaiLoi)}">${escapeHtml(r.dienGiaiLoi)}</span>
             </div>
+            ${r.yKienNguoiSua ? `
+              <div class="h-card-reply">
+                💬 <strong>Ý kiến sửa:</strong> ${escapeHtml(r.yKienNguoiSua)}
+              </div>
+            ` : ''}
 
-            <div class="card-status-bar">
-              <div class="card-status-unit">
-                <span class="text-caption text-muted block" style="margin-bottom: 2px;">Tiến độ sửa lỗi:</span>
-                <button class="btn-status-trigger ${canEditGroup2 ? 'btn-status-active' : 'btn-status-readonly'}" onclick="window.hsbaApp.modalController.openQuickStatusModal('${r.id}')" title="${canEditGroup2 ? 'Bấm để cập nhật nhanh tiến độ sửa lỗi' : 'Xem tiến độ'}">
+            <!-- Bottom Action Toolbar -->
+            <div class="h-card-bottom" onclick="event.stopPropagation()">
+              <div class="h-card-status-left">
+                <button type="button" class="btn-status-trigger ${canEditGroup2 ? 'btn-status-active' : 'btn-status-readonly'}" onclick="window.hsbaApp.modalController.openQuickStatusModal('${r.id}')" title="${canEditGroup2 ? 'Bấm để đổi nhanh tiến độ sửa lỗi' : 'Tiến độ'}">
                   ${getErrorStatusBadge(r.trangThaiLoi)}
                   ${canEditGroup2 ? '<span class="btn-quick-edit-icon">✏️</span>' : ''}
                 </button>
               </div>
-            </div>
 
-            <div class="card-footer-actions">
-              <button class="btn btn-sm btn-outline flex-1 btn-mobile-card-edit" onclick="window.hsbaApp.modalController.openEditErrorModal('${r.id}')">
-                ✏️ Chi tiết / Chỉnh sửa hồ sơ
-              </button>
+              <div class="h-card-actions-right">
+                <button type="button" class="btn-h-action btn-h-edit" onclick="window.hsbaApp.modalController.openEditErrorModal('${r.id}')" title="Xem chi tiết & Chỉnh sửa">
+                  ✏️ Chi tiết
+                </button>
+                ${canDeleteRecord ? `
+                  <button type="button" class="btn-h-action btn-h-del" onclick="window.hsbaApp.quickDeleteRecord('${r.id}', event)" title="Xóa hồ sơ lỗi">
+                    🗑️
+                  </button>
+                ` : ''}
+              </div>
             </div>
           </div>
         `;
@@ -1565,33 +1576,37 @@ class App {
       }).join('');
     }
 
-    // 2. CARDS MOBILE
+    // 2. MOBILE CARDS (DẠNG THẺ NGANG TINH TẾ & NHẸ NHÀNG)
     if (cardsContainer) {
+      const canDeleteDischarge = storage.canDeleteDischargeReport();
+
       cardsContainer.innerHTML = reports.map(r => {
         const isPassed = r.chotThongCong === 'CO';
 
         return `
-          <div class="mobile-error-card ${!isPassed ? 'card-unresolved' : ''}">
-            <div class="card-top-bar">
-              <div class="card-patient-info">
+          <div class="patient-h-card discharge-h-card ${!isPassed ? 'h-card-unresolved' : ''}" onclick="window.hsbaApp.modalController.openEditDischargeReportModal('${r.id}')" title="Bấm vào để xem & kiểm duyệt ca ra viện">
+            <!-- Header: Mã KCB, Tên BN, Trạng thái Thông cổng -->
+            <div class="h-card-header">
+              <div class="h-card-left-group">
                 <span class="card-ma-kcb">${escapeHtml(r.maKCB)}</span>
-                <h4 class="card-patient-name">${escapeHtml(r.tenBenhNhan)}</h4>
+                <span class="h-card-name">${escapeHtml(r.tenBenhNhan)}</span>
               </div>
-              <div>
-                ${isPassed ? '<span class="badge-gate-pass">🟢 ĐỒNG Ý THÔNG CỔNG</span>' : '<span class="badge-gate-pending">🔴 CHƯA ĐỒNG Ý</span>'}
+              <div class="h-card-badges">
+                ${isPassed ? '<span class="badge-gate-pass">🟢 ĐỒNG Ý</span>' : '<span class="badge-gate-pending">🔴 CHƯA</span>'}
               </div>
             </div>
 
-            <div class="card-meta-grid">
-              <div><span class="meta-label">⏰ Ra viện:</span> <strong>${formatDischargeDateTimeVN(r.ngayRaVien || r.ngayBaoCao)}</strong></div>
-              <div><span class="meta-label">📅 Báo cáo:</span> <strong>${formatDateVN(r.ngayBaoCao)}</strong></div>
-              <div><span class="meta-label">👨‍⚕️ Bác sĩ:</span> <strong>${escapeHtml(r.tenBacSi)}</strong></div>
-              <div><span class="meta-label">🏥 Khoa:</span> <strong>${escapeHtml(r.phong)}</strong></div>
+            <!-- Meta row: Ra viện, Bác sĩ, Khoa -->
+            <div class="h-card-meta">
+              <span class="h-meta-item" title="Thời gian ra viện">⏰ <strong>${formatDischargeDateTimeVN(r.ngayRaVien || r.ngayBaoCao)}</strong></span>
+              <span class="h-meta-item" title="Bác sĩ điều trị">👨‍⚕️ ${escapeHtml(r.tenBacSi)}</span>
+              <span class="h-meta-item" title="Khoa / Phòng">🏥 ${escapeHtml(r.phong)}</span>
             </div>
 
-            <div class="card-steps-container">
-              <span class="card-steps-title">Khâu kiểm lỗi chuyên môn (Bấm để đổi nhanh):</span>
-              <div class="steps-badge-grid">
+            <!-- 3 Khâu kiểm chuyên môn -->
+            <div class="h-card-steps" onclick="event.stopPropagation()">
+              <span class="h-steps-label">Kiểm lỗi:</span>
+              <div class="h-steps-badge-row">
                 ${renderStepBtn('duoc', 'Dược', r.kiemDuoc, r.id)}
                 ${renderStepBtn('ketoan', 'KTBH', r.kiemKeToanBH, r.id)}
                 ${renderStepBtn('khth', 'KHTH', r.kiemKHTH, r.id)}
@@ -1599,15 +1614,33 @@ class App {
             </div>
 
             ${r.baoCaoTinhTrangSuaLoi ? `
-              <div class="card-response-box" style="margin-top: 8px;">
-                <strong>💬 Tình trạng sửa lỗi:</strong> ${escapeHtml(r.baoCaoTinhTrangSuaLoi)}
+              <div class="h-card-reply">
+                📝 <strong>Sửa lỗi:</strong> ${escapeHtml(r.baoCaoTinhTrangSuaLoi)}
               </div>
             ` : ''}
 
-            <div class="card-footer-actions">
-              <button class="btn btn-sm btn-outline flex-1 btn-mobile-card-edit" onclick="window.hsbaApp.modalController.openEditDischargeReportModal('${r.id}')">
-                ✏️ Kiểm lỗi chuyên môn & Chốt cổng
-              </button>
+            <!-- Bottom Action Toolbar -->
+            <div class="h-card-bottom" onclick="event.stopPropagation()">
+              <div class="h-card-status-left">
+                ${canChot ? `
+                  <button type="button" class="btn-h-gate-toggle ${isPassed ? 'gate-active-pass' : 'gate-active-pending'}" onclick="window.hsbaApp.quickToggleDischargeGate('${r.id}', event)" title="Bấm để chuyển nhanh trạng thái Thông Cổng">
+                    ${isPassed ? '🟢 Đã Thông Cổng' : '🔴 Chốt Thông Cổng'}
+                  </button>
+                ` : `
+                  <span class="text-xs text-muted font-medium">${isPassed ? '🟢 Đã duyệt cổng' : '🔴 Chưa duyệt cổng'}</span>
+                `}
+              </div>
+
+              <div class="h-card-actions-right">
+                <button type="button" class="btn-h-action btn-h-edit" onclick="window.hsbaApp.modalController.openEditDischargeReportModal('${r.id}')" title="Kiểm duyệt chuyên môn & Chốt cổng">
+                  ✏️ Kiểm lỗi & Sửa
+                </button>
+                ${canDeleteDischarge ? `
+                  <button type="button" class="btn-h-action btn-h-del" onclick="window.hsbaApp.quickDeleteDischargeReport('${r.id}', event)" title="Xóa ca ra viện">
+                    🗑️
+                  </button>
+                ` : ''}
+              </div>
             </div>
           </div>
         `;
@@ -1743,6 +1776,34 @@ class App {
     }
     if (textEl) textEl.textContent = label;
     if (chartTimeLabel) chartTimeLabel.textContent = label;
+  }
+
+  setDashboardUserScope(scope) {
+    this.dashboardUserScope = scope;
+    this.updateDashboardUserScopeUI();
+    this.renderDashboardView();
+  }
+
+  updateDashboardUserScopeUI() {
+    const user = storage.getCurrentUser();
+    const btnMine = document.getElementById('btn-scope-mine');
+    const btnAll = document.getElementById('btn-scope-all');
+    const labelEl = document.getElementById('dash-user-scope-label');
+
+    if (btnMine) btnMine.classList.toggle('active', this.dashboardUserScope === 'MINE');
+    if (btnAll) btnAll.classList.toggle('active', this.dashboardUserScope === 'ALL');
+
+    if (labelEl) {
+      if (this.dashboardUserScope === 'MINE') {
+        const uName = user ? user.name : 'Người dùng';
+        const uDept = user && user.department ? ` · ${user.department}` : '';
+        labelEl.textContent = `Chính tôi (${uName}${uDept})`;
+        labelEl.style.color = 'var(--primary)';
+      } else {
+        labelEl.textContent = 'Toàn viện (Tất cả khoa phòng & nhân viên)';
+        labelEl.style.color = 'var(--slate-700)';
+      }
+    }
   }
 
   syncDashboardTimeFilterInputs() {
@@ -2723,15 +2784,19 @@ class App {
     const records = storage.getRecords();
     const dischargeReports = storage.getDischargeReports();
     const departments = storage.getDepartments();
+    const currentUser = storage.getCurrentUser();
 
-    // 0. Đồng bộ hiển thị Input ngày / tháng / năm
+    // 0. Đồng bộ hiển thị Input ngày / tháng / năm & Scope người dùng
     this.syncDashboardTimeFilterInputs();
+    this.updateDashboardUserScopeUI();
 
-    // 1. Tính toán toàn bộ dữ liệu thống kê theo thời gian đã chọn
+    const userFilter = (this.dashboardUserScope === 'MINE' && currentUser) ? currentUser : null;
+
+    // 1. Tính toán toàn bộ dữ liệu thống kê theo thời gian và phạm vi người dùng
     const stats = computeDashboardStats(records, dischargeReports, departments, {
       type: this.dashboardTimeMode,
       value: this.dashboardTimeValue
-    });
+    }, userFilter);
     this.dashboardStats = stats;
 
     const daThongCong = stats.passedDischarge;
@@ -2745,8 +2810,12 @@ class App {
 
     const elDischargeDepts = document.getElementById('dash-discharge-depts-count');
     if (elDischargeDepts) {
-      const activeDeptsCount = stats.deptStats.filter(d => d.totalDischarge > 0).length;
-      elDischargeDepts.textContent = `${activeDeptsCount}/${departments.length} khoa có ca ra viện`;
+      if (stats.isPersonal) {
+        elDischargeDepts.textContent = `Ca ra viện của BS: ${currentUser ? currentUser.name : ''}`;
+      } else {
+        const activeDeptsCount = stats.deptStats.filter(d => d.totalDischarge > 0).length;
+        elDischargeDepts.textContent = `${activeDeptsCount}/${departments.length} khoa có ca ra viện`;
+      }
     }
 
     const elDK1 = document.getElementById('dash-err-dk1-count');
@@ -2923,7 +2992,7 @@ class App {
           enabled: document.getElementById('zalo-cfg-enabled').checked,
           soundEnabled: document.getElementById('push-cfg-sound') ? document.getElementById('push-cfg-sound').checked : true,
           autoReminder: document.getElementById('zalo-cfg-auto').checked,
-          reminderIntervalHours: parseInt(document.getElementById('zalo-cfg-interval').value) || 2,
+          reminderIntervalHours: parseFloat(document.getElementById('zalo-cfg-interval').value) || 2,
           oaName: document.getElementById('zalo-cfg-oaname').value.trim(),
           titleTemplate: document.getElementById('push-cfg-title-template') ? document.getElementById('push-cfg-title-template').value : '🚨 [CẢNH BÁO HSBA] {tenBenhNhan} - {mucDoCanhBao}',
           messageTemplate: document.getElementById('zalo-cfg-template').value
@@ -2958,7 +3027,7 @@ class App {
     const btnTriggerBatchZalo = document.getElementById('btn-trigger-batch-zalo');
     if (btnTriggerBatchZalo) {
       btnTriggerBatchZalo.onclick = () => {
-        const sentCount = notificationService.checkAndDispatchAutoReminders();
+        const sentCount = notificationService.checkAndDispatchAutoReminders(true);
         showToast(`⚡ Đã quét và bắn Push Notification nhắc nhở (${sentCount} ca chưa sửa)!`, 'info', 4000);
         this.renderZaloSettings();
       };
@@ -3433,6 +3502,59 @@ class App {
         this.populateFilterSuggestions();
       }
     });
+  }
+
+  quickDeleteRecord(recordId, e) {
+    if (e) e.stopPropagation();
+    const canDel = storage.canAddRecord() || storage.isAdmin();
+    if (!canDel) {
+      showToast('⚠️ Bạn không có quyền xóa hồ sơ lỗi này!', 'warning');
+      return;
+    }
+    const record = storage.getRecords().find(r => r.id === recordId);
+    const label = record ? `${record.tenBenhNhan || ''} (${record.maKCB || ''})` : recordId;
+    if (!confirm(`Bạn có chắc chắn muốn xóa hồ sơ lỗi của bệnh nhân ${label}?`)) return;
+    const ok = storage.deleteRecord(recordId);
+    if (ok) {
+      showToast('Đã xóa hồ sơ lỗi thành công!', 'info');
+      this.refreshAllViews();
+    }
+  }
+
+  quickDeleteDischargeReport(reportId, e) {
+    if (e) e.stopPropagation();
+    if (!storage.canDeleteDischargeReport()) {
+      showToast('⚠️ Chỉ Khoa/Bác sĩ điều trị hoặc Admin mới có quyền xóa báo cáo ra viện!', 'warning');
+      return;
+    }
+    const report = storage.getDischargeReports().find(r => r.id === reportId);
+    const label = report ? `${report.tenBenhNhan || ''} (${report.maKCB || ''})` : reportId;
+    if (!confirm(`Bạn có chắc chắn muốn xóa ca ra viện của bệnh nhân ${label}?`)) return;
+    const ok = storage.deleteDischargeReport(reportId);
+    if (ok) {
+      showToast('Đã xóa ca ra viện thành công!', 'info');
+      this.refreshAllViews();
+    }
+  }
+
+  quickToggleDischargeGate(reportId, e) {
+    if (e) e.stopPropagation();
+    if (!storage.canChotThongCong()) {
+      showToast('⚠️ Chỉ Phòng KHTH hoặc Admin mới có quyền chốt thông cổng!', 'warning');
+      return;
+    }
+    const report = storage.getDischargeReports().find(r => r.id === reportId);
+    if (!report) return;
+    const newGate = report.chotThongCong === 'CO' ? 'CHUA' : 'CO';
+    const roleName = storage.getRoleDetails().name;
+    const updates = {
+      chotThongCong: newGate,
+      ngayThongCong: newGate === 'CO' ? new Date().toISOString().replace('T', ' ').substring(0, 16) : null,
+      nguoiThongCong: newGate === 'CO' ? roleName : null
+    };
+    storage.updateDischargeReport(reportId, updates);
+    showToast(newGate === 'CO' ? '🟢 Đã chốt ĐỒNG Ý thông cổng!' : '🔴 Đã chuyển về CHƯA thông cổng', 'success');
+    this.refreshAllViews();
   }
 }
 

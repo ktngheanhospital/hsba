@@ -168,7 +168,7 @@ export class ModalController {
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-add">Hủy bỏ</button>
           <button type="submit" class="btn btn-primary" id="btn-submit-add">
-            <span>💾 Lưu & Bắn Thông Báo Đẩy</span>
+            <span>💾 Lưu hồ sơ rà soát</span>
           </button>
         </div>
       </form>
@@ -428,7 +428,7 @@ export class ModalController {
               <select id="edit-trangThaiLoi" class="form-select highlight-select" required>
                 <option value="CHƯA SỬA" ${record.trangThaiLoi === 'CHƯA SỬA' ? 'selected' : ''}>🔴 CHƯA SỬA</option>
                 <option value="ĐÃ XEM - ĐANG SỬA" ${record.trangThaiLoi === 'ĐÃ XEM - ĐANG SỬA' ? 'selected' : ''}>🟠 ĐÃ XEM - ĐANG SỬA</option>
-                <option value="ĐÃ XONG" ${record.trangThaiLoi === 'ĐÃ XONG' ? 'selected' : ''}>🟢 ĐÃ XONG (Dừng gửi tin Zalo)</option>
+                <option value="ĐÃ XONG" ${record.trangThaiLoi === 'ĐÃ XONG' ? 'selected' : ''}>🟢 ĐÃ XONG (Hoàn thành sửa lỗi)</option>
                 <option value="HỦY CHUYỂN VIỆN" ${record.trangThaiLoi === 'HỦY CHUYỂN VIỆN' ? 'selected' : ''}>⚪ HỦY CHUYỂN VIỆN</option>
                 <option value="KHÁC" ${record.trangThaiLoi === 'KHÁC' ? 'selected' : ''}>⚙️ KHÁC</option>
               </select>
@@ -445,18 +445,18 @@ export class ModalController {
 
         <div class="modal-footer modal-footer-space-between">
           <div class="footer-actions-left">
+            <button type="button" class="btn btn-outline" id="btn-print-record" title="In phiếu nhắc nhở / biên bản rà soát">
+              <span>🖨️ In phiếu nhắc lỗi</span>
+            </button>
             ${canDelete ? `
-              <button type="button" class="btn btn-danger-outline" id="btn-delete-record">
+              <button type="button" class="btn btn-danger-outline" id="btn-delete-record" title="Xóa hồ sơ rà soát">
                 <span>🗑️ Xóa bản ghi</span>
               </button>
             ` : ''}
-            <button type="button" class="btn btn-outline" id="btn-print-record">
-              <span>🖨️ In phiếu</span>
-            </button>
           </div>
           <div class="footer-actions-right">
             <button type="button" class="btn btn-secondary" id="btn-cancel-edit">Đóng</button>
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" class="btn btn-primary" id="btn-save-edit">
               <span>💾 Lưu thay đổi</span>
             </button>
           </div>

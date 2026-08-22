@@ -269,6 +269,11 @@ export class StorageService {
     return ROLES[activeRoleId] || ROLES.ADMIN;
   }
 
+  isAdmin(roleId = null) {
+    const activeRole = roleId || this.getCurrentRole();
+    return activeRole === 'ADMIN';
+  }
+
   // PHÂN QUYỀN CÁC KHÂU KIỂM LỖI CHUYÊN MÔN:
   canCheckDischargeStep(stepKey, roleId = null) {
     const activeRole = roleId || this.getCurrentRole();
