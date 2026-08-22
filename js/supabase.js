@@ -312,13 +312,21 @@ class SupabaseService {
     }
   }
 
-  async deleteRecord(recordId) {
+  async deleteRecord(recordId, maKCB = null) {
     if (!this.client || !recordId) return false;
     try {
-      const sId = String(recordId);
-      let { error } = await this.client.from('records').delete().eq('id', sId);
-      if (error) {
-        // Thử tìm theo ma_kcb nếu có
+      const sId = String(recordId).trim();
+      const kcb = maKCB ? String(maKCB).trim() : null;
+
+      // 1. Xóa theo ID
+      await this.client.from('records').delete().eq('id', sId);
+
+      // 2. Xóa theo mã KCB nếu có
+      if (kcb && kcb !== sId) {
+        await this.client.from('records').delete().eq('ma_kcb', kcb);
+      }
+      // Dự phòng nếu sId là mã KCB
+      if (!sId.startsWith('REC-')) {
         await this.client.from('records').delete().eq('ma_kcb', sId);
       }
       return true;
@@ -374,12 +382,17 @@ class SupabaseService {
     }
   }
 
-  async deleteDischargeReport(reportId) {
+  async deleteDischargeReport(reportId, maKCB = null) {
     if (!this.client || !reportId) return false;
     try {
-      const sId = String(reportId);
-      let { error } = await this.client.from('discharge_reports').delete().eq('id', sId);
-      if (error) {
+      const sId = String(reportId).trim();
+      const kcb = maKCB ? String(maKCB).trim() : null;
+
+      await this.client.from('discharge_reports').delete().eq('id', sId);
+      if (kcb && kcb !== sId) {
+        await this.client.from('discharge_reports').delete().eq('ma_kcb', kcb);
+      }
+      if (!sId.startsWith('BCRV-')) {
         await this.client.from('discharge_reports').delete().eq('ma_kcb', sId);
       }
       return true;
@@ -418,7 +431,8 @@ class SupabaseService {
   async deleteDepartment(deptId) {
     if (!this.client || !deptId) return false;
     try {
-      const { error } = await this.client.from('departments').delete().eq('id', String(deptId));
+      const sId = String(deptId).trim();
+      const { error } = await this.client.from('departments').delete().eq('id', sId);
       if (error) throw error;
       return true;
     } catch (e) {
@@ -457,7 +471,8 @@ class SupabaseService {
   async deleteStaff(staffId) {
     if (!this.client || !staffId) return false;
     try {
-      const { error } = await this.client.from('staff').delete().eq('id', String(staffId));
+      const sId = String(staffId).trim();
+      const { error } = await this.client.from('staff').delete().eq('id', sId);
       if (error) throw error;
       return true;
     } catch (e) {
@@ -470,7 +485,7 @@ class SupabaseService {
   // ĐỒNG BỘ TOÀN DIỆN (FULL SYNC / SMART SYNC)
   // =========================================================================
 
-  // Đẩy toàn bộ dữ liệu từ LocalStorage lên Supabase
+  // Đẩy toàn bộ dữ liệu từ LocalStorage lên Supabase (chỉ khi người dùng bấm nút thủ công)
   async pushAllLocalDataToCloud(storageService) {
     if (!this.client) return { success: false, message: 'Chưa khởi tạo Supabase Client' };
 
@@ -502,60 +517,49 @@ class SupabaseService {
     }
   }
 
-  // Đồng bộ thông minh 2 chiều (Smart 2-Way Sync): Bảo toàn dữ liệu cục bộ và hòa nhập dữ liệu Cloud
+  // Đồng bộ thông minh 2 chiều (Smart 2-Way Sync): Cloud là nguồn chuẩn authoritative, loại bỏ hiện tượng hồi sinh dữ liệu đã xóa
   async smartSync(storageService) {
     if (!this.client || this.isSyncing) return;
     this.isSyncing = true;
     let hasLocalChanges = false;
 
     try {
-      const tombstones = storageService.getTombstones ? storageService.getTombstones() : {
-        records: [],
-        discharge: [],
-        departments: [],
-        staff: []
+      const getTombList = (type) => {
+        if (typeof storageService.getTombstoneIds === 'function') {
+          return storageService.getTombstoneIds(type);
+        }
+        const ts = storageService.getTombstones ? storageService.getTombstones() : {};
+        return Object.keys(ts[type] || {});
       };
+
+      const deptTombs = getTombList('departments');
+      const staffTombs = getTombList('staff');
+      const recordTombs = getTombList('records');
+      const dischargeTombs = getTombList('discharge');
 
       // 1. Departments (Danh mục Khoa/Phòng)
       let localDepts = storageService.getDepartments();
       const cloudDepts = await this.fetchDepartments();
 
       if (cloudDepts !== null) {
-        // Purge tombstoned departments from cloud
-        if (tombstones.departments && tombstones.departments.length) {
-          tombstones.departments.forEach(tId => {
+        // Dọn dẹp các khoa phòng đã bị xóa trên Cloud
+        if (deptTombs.length > 0) {
+          for (const tId of deptTombs) {
             if (cloudDepts.some(cd => String(cd.id) === String(tId))) {
-              this.deleteDepartment(tId);
+              await this.deleteDepartment(tId);
             }
-          });
+          }
         }
 
         const validCloudDepts = cloudDepts.filter(cd => !storageService.isTombstoned('departments', cd.id));
-        localDepts = localDepts.filter(ld => !storageService.isTombstoned('departments', ld.id));
-
-        if (validCloudDepts.length === 0 && localDepts.length > 0) {
-          await this.client.from('departments').upsert(localDepts.map(d => this.deptToDb(d)));
-        } else if (validCloudDepts.length > 0) {
-          const deptsToPush = localDepts.filter(ld => 
-            !validCloudDepts.some(cd => String(cd.id) === String(ld.id) || (cd.name && ld.name && cd.name.trim().toLowerCase() === ld.name.trim().toLowerCase()))
-          );
-          if (deptsToPush.length) {
-            await this.client.from('departments').upsert(deptsToPush.map(d => this.deptToDb(d)));
-          }
-
-          const mergedDepts = [...localDepts];
-          validCloudDepts.forEach(cd => {
-            const exists = mergedDepts.some(md => String(md.id) === String(cd.id) || (md.name && cd.name && md.name.trim().toLowerCase() === cd.name.trim().toLowerCase()));
-            if (!exists) {
-              mergedDepts.push(cd);
-              hasLocalChanges = true;
-            }
-          });
-
-          if (mergedDepts.length !== localDepts.length) {
-            storageService.saveDepartments(mergedDepts);
+        if (validCloudDepts.length > 0) {
+          if (JSON.stringify(localDepts) !== JSON.stringify(validCloudDepts)) {
+            storageService.saveDepartments(validCloudDepts);
             hasLocalChanges = true;
           }
+        } else if (localDepts.length > 0) {
+          // Chỉ đẩy nếu Cloud chưa từng có gì
+          await this.client.from('departments').upsert(localDepts.map(d => this.deptToDb(d)));
         }
       }
 
@@ -564,43 +568,22 @@ class SupabaseService {
       const cloudStaff = await this.fetchStaff();
 
       if (cloudStaff !== null) {
-        if (tombstones.staff && tombstones.staff.length) {
-          tombstones.staff.forEach(tId => {
+        if (staffTombs.length > 0) {
+          for (const tId of staffTombs) {
             if (cloudStaff.some(cs => String(cs.id) === String(tId))) {
-              this.deleteStaff(tId);
+              await this.deleteStaff(tId);
             }
-          });
+          }
         }
 
         const validCloudStaff = cloudStaff.filter(cs => !storageService.isTombstoned('staff', cs.id));
-        localStaff = localStaff.filter(ls => !storageService.isTombstoned('staff', ls.id));
-
-        if (validCloudStaff.length === 0 && localStaff.length > 0) {
+        if (validCloudStaff.length > 0) {
+          if (JSON.stringify(localStaff) !== JSON.stringify(validCloudStaff)) {
+            storageService.saveStaff(validCloudStaff);
+            hasLocalChanges = true;
+          }
+        } else if (localStaff.length > 0) {
           await this.client.from('staff').upsert(localStaff.map(s => this.staffToDb(s)));
-        } else if (validCloudStaff.length > 0) {
-          const staffToPush = localStaff.filter(ls => !validCloudStaff.some(cs => String(cs.id) === String(ls.id)));
-          if (staffToPush.length) {
-            await this.client.from('staff').upsert(staffToPush.map(s => this.staffToDb(s)));
-          }
-
-          const mergedStaff = [...localStaff];
-          validCloudStaff.forEach(cs => {
-            const idx = mergedStaff.findIndex(ms => String(ms.id) === String(cs.id));
-            if (idx === -1) {
-              mergedStaff.push(cs);
-              hasLocalChanges = true;
-            } else {
-              // Update if changed
-              if (JSON.stringify(mergedStaff[idx]) !== JSON.stringify(cs)) {
-                mergedStaff[idx] = { ...mergedStaff[idx], ...cs };
-                hasLocalChanges = true;
-              }
-            }
-          });
-
-          if (hasLocalChanges || mergedStaff.length !== localStaff.length) {
-            storageService.saveStaff(mergedStaff);
-          }
         }
       }
 
@@ -609,60 +592,39 @@ class SupabaseService {
       const cloudRecords = await this.fetchRecords();
 
       if (cloudRecords !== null) {
-        // Xóa các bản ghi đã bị người dùng xóa trên máy này khỏi Supabase
-        if (tombstones.records && tombstones.records.length) {
-          tombstones.records.forEach(tId => {
-            if (cloudRecords.some(cr => String(cr.id) === String(tId))) {
-              this.deleteRecord(tId);
+        // Xóa các bản ghi đã bị xóa khỏi Cloud nếu Cloud còn sót
+        if (recordTombs.length > 0) {
+          for (const tId of recordTombs) {
+            if (cloudRecords.some(cr => String(cr.id) === String(tId) || String(cr.maKCB) === String(tId))) {
+              await this.deleteRecord(tId);
             }
-          });
+          }
         }
 
-        // Lọc bỏ các bản ghi đã bị tombstone khỏi Cloud dataset
-        const validCloudRecords = cloudRecords.filter(cr => !storageService.isTombstoned('records', cr.id));
-        localRecords = localRecords.filter(lr => !storageService.isTombstoned('records', lr.id));
+        // Lọc bỏ tombstone khỏi Cloud dataset
+        const validCloudRecords = cloudRecords.filter(cr => 
+          !storageService.isTombstoned('records', cr.id) && !storageService.isTombstoned('records', cr.maKCB)
+        );
 
-        if (validCloudRecords.length === 0 && localRecords.length > 0) {
-          await this.client.from('records').upsert(localRecords.map(r => this.recordToDb(r)));
-        } else if (validCloudRecords.length > 0) {
-          // Push any local record not yet on cloud
-          const recordsToPush = localRecords.filter(lr => !validCloudRecords.some(cr => String(cr.id) === String(lr.id)));
-          if (recordsToPush.length) {
-            await this.client.from('records').upsert(recordsToPush.map(r => this.recordToDb(r)));
-          }
-
-          const mergedRecords = [...localRecords];
-          validCloudRecords.forEach(cr => {
-            const idx = mergedRecords.findIndex(mr => String(mr.id) === String(cr.id));
-            if (idx === -1) {
-              mergedRecords.unshift(cr);
-              hasLocalChanges = true;
-            } else {
-              // Merge updates
-              const cur = mergedRecords[idx];
-              const updatedPushCount = Math.max(cr.pushSentCount || 0, cur.pushSentCount || 0);
-              const updatedLastPush = cr.lastPushSentAt || cur.lastPushSentAt || null;
-              
-              if (
-                cur.trangThaiLoi !== cr.trangThaiLoi ||
-                cur.yKienNguoiSua !== cr.yKienNguoiSua ||
-                cur.mucDoLoi !== cr.mucDoLoi ||
-                cur.pushSentCount !== updatedPushCount
-              ) {
-                mergedRecords[idx] = {
-                  ...cur,
-                  ...cr,
-                  pushSentCount: updatedPushCount,
-                  lastPushSentAt: updatedLastPush
-                };
-                hasLocalChanges = true;
-              }
+        // CLOUD LÀ SOURCE OF TRUTH:
+        // Cập nhật dữ liệu cục bộ theo Cloud, KHÔNG tự động re-upload các bản ghi đã bị xóa từ máy khác
+        let recordsChanged = false;
+        if (localRecords.length !== validCloudRecords.length) {
+          recordsChanged = true;
+        } else {
+          const localMap = new Map(localRecords.map(r => [String(r.id), r]));
+          for (const cr of validCloudRecords) {
+            const lr = localMap.get(String(cr.id));
+            if (!lr || JSON.stringify(lr) !== JSON.stringify(cr)) {
+              recordsChanged = true;
+              break;
             }
-          });
-
-          if (hasLocalChanges || mergedRecords.length !== localRecords.length) {
-            storageService.saveRecords(mergedRecords);
           }
+        }
+
+        if (recordsChanged) {
+          storageService.saveRecords(validCloudRecords);
+          hasLocalChanges = true;
         }
       }
 
@@ -671,50 +633,35 @@ class SupabaseService {
       const cloudDischarge = await this.fetchDischargeReports();
 
       if (cloudDischarge !== null) {
-        if (tombstones.discharge && tombstones.discharge.length) {
-          tombstones.discharge.forEach(tId => {
-            if (cloudDischarge.some(cd => String(cd.id) === String(tId))) {
-              this.deleteDischargeReport(tId);
+        if (dischargeTombs.length > 0) {
+          for (const tId of dischargeTombs) {
+            if (cloudDischarge.some(cd => String(cd.id) === String(tId) || String(cd.maKCB) === String(tId))) {
+              await this.deleteDischargeReport(tId);
             }
-          });
+          }
         }
 
-        const validCloudDischarge = cloudDischarge.filter(cd => !storageService.isTombstoned('discharge', cd.id));
-        localDischarge = localDischarge.filter(ld => !storageService.isTombstoned('discharge', ld.id));
+        const validCloudDischarge = cloudDischarge.filter(cd => 
+          !storageService.isTombstoned('discharge', cd.id) && !storageService.isTombstoned('discharge', cd.maKCB)
+        );
 
-        if (validCloudDischarge.length === 0 && localDischarge.length > 0) {
-          await this.client.from('discharge_reports').upsert(localDischarge.map(r => this.dischargeToDb(r)));
-        } else if (validCloudDischarge.length > 0) {
-          const repToPush = localDischarge.filter(lr => !validCloudDischarge.some(cr => String(cr.id) === String(lr.id)));
-          if (repToPush.length) {
-            await this.client.from('discharge_reports').upsert(repToPush.map(r => this.dischargeToDb(r)));
-          }
-
-          const mergedReps = [...localDischarge];
-          validCloudDischarge.forEach(cr => {
-            const idx = mergedReps.findIndex(mr => String(mr.id) === String(cr.id));
-            if (idx === -1) {
-              mergedReps.unshift(cr);
-              hasLocalChanges = true;
-            } else {
-              const cur = mergedReps[idx];
-              if (
-                cur.chotThongCong !== cr.chotThongCong ||
-                cur.ngayRaVien !== cr.ngayRaVien ||
-                JSON.stringify(cur.kiemDuoc) !== JSON.stringify(cr.kiemDuoc) ||
-                JSON.stringify(cur.kiemKeToanBH) !== JSON.stringify(cr.kiemKeToanBH) ||
-                JSON.stringify(cur.kiemKHTH) !== JSON.stringify(cr.kiemKHTH) ||
-                JSON.stringify(cur.kiemIT) !== JSON.stringify(cr.kiemIT)
-              ) {
-                mergedReps[idx] = cr;
-                hasLocalChanges = true;
-              }
+        let dischargeChanged = false;
+        if (localDischarge.length !== validCloudDischarge.length) {
+          dischargeChanged = true;
+        } else {
+          const localDischargeMap = new Map(localDischarge.map(r => [String(r.id), r]));
+          for (const cd of validCloudDischarge) {
+            const ld = localDischargeMap.get(String(cd.id));
+            if (!ld || JSON.stringify(ld) !== JSON.stringify(cd)) {
+              dischargeChanged = true;
+              break;
             }
-          });
-
-          if (hasLocalChanges || mergedReps.length !== localDischarge.length) {
-            storageService.saveDischargeReports(mergedReps);
           }
+        }
+
+        if (dischargeChanged) {
+          storageService.saveDischargeReports(validCloudDischarge);
+          hasLocalChanges = true;
         }
       }
 

@@ -63,6 +63,11 @@ export class StorageService {
     } catch (e) {}
   }
 
+  getTombstoneIds(type) {
+    const ts = this.getTombstones();
+    return Object.keys(ts[type] || {});
+  }
+
   addTombstone(type, id) {
     if (!id) return;
     const ts = this.getTombstones();
@@ -165,13 +170,17 @@ export class StorageService {
         }
         this.saveRecords(records);
       } else if (payload.eventType === 'DELETE') {
-        const delId = payload.old ? (payload.old.id || payload.old.ma_kcb) : null;
-        if (delId) {
-          this.addTombstone('records', delId);
-          let records = this.getRecords();
-          records = records.filter(r => r.id !== String(delId) && r.id !== delId && r.maKCB !== delId);
-          this.saveRecords(records);
-        }
+        const oldId = payload.old ? payload.old.id : null;
+        const oldKcb = payload.old ? payload.old.ma_kcb : null;
+        if (oldId) this.addTombstone('records', oldId);
+        if (oldKcb) this.addTombstone('records', oldKcb);
+        let records = this.getRecords();
+        records = records.filter(r => {
+          if (oldId && (String(r.id) === String(oldId) || r.id === oldId)) return false;
+          if (oldKcb && (String(r.maKCB) === String(oldKcb) || r.maKCB === oldKcb)) return false;
+          return true;
+        });
+        this.saveRecords(records);
       }
     } else if (table === 'discharge_reports') {
       if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
@@ -185,13 +194,17 @@ export class StorageService {
         else reps.unshift(rep);
         this.saveDischargeReports(reps);
       } else if (payload.eventType === 'DELETE') {
-        const delId = payload.old ? (payload.old.id || payload.old.ma_kcb) : null;
-        if (delId) {
-          this.addTombstone('discharge', delId);
-          let reps = this.getDischargeReports();
-          reps = reps.filter(r => r.id !== String(delId) && r.id !== delId && r.maKCB !== delId);
-          this.saveDischargeReports(reps);
-        }
+        const oldId = payload.old ? payload.old.id : null;
+        const oldKcb = payload.old ? payload.old.ma_kcb : null;
+        if (oldId) this.addTombstone('discharge', oldId);
+        if (oldKcb) this.addTombstone('discharge', oldKcb);
+        let reps = this.getDischargeReports();
+        reps = reps.filter(r => {
+          if (oldId && (String(r.id) === String(oldId) || r.id === oldId)) return false;
+          if (oldKcb && (String(r.maKCB) === String(oldKcb) || r.maKCB === oldKcb)) return false;
+          return true;
+        });
+        this.saveDischargeReports(reps);
       }
     } else if (table === 'departments') {
       if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
@@ -606,21 +619,19 @@ export class StorageService {
     if (!recordId) return false;
     this.addTombstone('records', recordId);
     let records = this.getRecords();
-    const initialLen = records.length;
-    const targetRecord = records.find(r => r.id === recordId);
+    const targetRecord = records.find(r => r.id === recordId || r.maKCB === recordId);
     const targetMaKCB = targetRecord ? targetRecord.maKCB : null;
-    records = records.filter(r => r.id !== recordId);
-    if (records.length !== initialLen) {
-      this.saveRecords(records);
-      if (targetMaKCB) {
-        this.syncDischargeReportsKetoan(targetMaKCB);
-      }
-      this.notifyTabs();
-      supabaseService.deleteRecord(recordId);
-      return true;
+    if (targetMaKCB) {
+      this.addTombstone('records', targetMaKCB);
     }
-    supabaseService.deleteRecord(recordId);
-    return false;
+    records = records.filter(r => r.id !== recordId && (!targetMaKCB || r.maKCB !== targetMaKCB));
+    this.saveRecords(records);
+    if (targetMaKCB) {
+      this.syncDischargeReportsKetoan(targetMaKCB);
+    }
+    this.notifyTabs();
+    supabaseService.deleteRecord(recordId, targetMaKCB);
+    return true;
   }
 
   // Tự động kiểm tra trạng thái KT-BH từ Danh sách lỗi dựa theo mã KCB:
@@ -825,16 +836,16 @@ export class StorageService {
     }
     this.addTombstone('discharge', reportId);
     let reports = this.getDischargeReports();
-    const initialLen = reports.length;
-    reports = reports.filter(r => r.id !== reportId);
-    if (reports.length !== initialLen) {
-      this.saveDischargeReports(reports);
-      this.notifyTabs();
-      supabaseService.deleteDischargeReport(reportId);
-      return true;
+    const targetRep = reports.find(r => r.id === reportId || r.maKCB === reportId);
+    const targetMaKCB = targetRep ? targetRep.maKCB : null;
+    if (targetMaKCB) {
+      this.addTombstone('discharge', targetMaKCB);
     }
-    supabaseService.deleteDischargeReport(reportId);
-    return false;
+    reports = reports.filter(r => r.id !== reportId && (!targetMaKCB || r.maKCB !== targetMaKCB));
+    this.saveDischargeReports(reports);
+    this.notifyTabs();
+    supabaseService.deleteDischargeReport(reportId, targetMaKCB);
+    return true;
   }
 
   // --- QUẢN LÝ KHOA/PHÒNG (DEPARTMENTS) ---
