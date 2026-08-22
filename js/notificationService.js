@@ -192,13 +192,39 @@ class NotificationService {
     }
   }
 
+  // Lấy danh sách nhân viên thuộc khoa phòng cụ thể
+  getStaffInDepartment(deptName) {
+    if (!deptName) return [];
+    const staffList = storage.getStaff();
+    const cleanDept = String(deptName).trim().toLowerCase();
+    return staffList.filter(s => {
+      const sDept = String(s.department || '').trim().toLowerCase();
+      return sDept === cleanDept || sDept.includes(cleanDept) || cleanDept.includes(sDept);
+    });
+  }
+
   // Tạo tiêu đề và nội dung Push Notification chuẩn từ bản ghi lỗi
   formatPushContent(record, staffMember = null) {
     const config = this.getConfig();
-    const staffName = staffMember ? staffMember.name : (record.nguoiChiDinh || 'Nhân viên y tế phụ trách');
-    const deptName = record.khoaPhong || 'Khoa điều trị';
+    const deptName = (record.khoaPhong || 'Khoa điều trị').trim();
+    const hasSpecificDoctor = Boolean(record.nguoiChiDinh && String(record.nguoiChiDinh).trim() && record.nguoiChiDinh.trim() !== '---');
+    
+    let staffName = 'Nhân viên y tế phụ trách';
+    if (staffMember) {
+      staffName = staffMember.name;
+    } else if (hasSpecificDoctor) {
+      staffName = record.nguoiChiDinh.trim();
+    } else {
+      // Khi không điền tên người chỉ định cụ thể -> gửi tới tất cả nhân viên thuộc Khoa đó
+      staffName = `Tất cả Bác sĩ / Nhân viên ${deptName}`;
+    }
 
-    let title = config.titleTemplate
+    let titleTemplate = config.titleTemplate;
+    if (!hasSpecificDoctor && !titleTemplate.includes('{khoaPhong}')) {
+      titleTemplate = `🚨 [CẢNH BÁO HSBA - KHOA ${deptName.toUpperCase()}] {tenBenhNhan} - {mucDoCanhBao}`;
+    }
+
+    let title = titleTemplate
       .replace(/{tenBenhNhan}/g, record.tenBenhNhan || '')
       .replace(/{maKCB}/g, record.maKCB || '')
       .replace(/{mucDoCanhBao}/g, record.mucDoCanhBao || 'Nhắc nhở')
@@ -214,10 +240,10 @@ class NotificationService {
       .replace(/{dienGiaiLoi}/g, record.dienGiaiLoi || '')
       .replace(/{trangThaiLoi}/g, record.trangThaiLoi || 'CHƯA SỬA');
 
-    return { title, message, staffName, deptName };
+    return { title, message, staffName, deptName, isDeptBroadcast: !hasSpecificDoctor };
   }
 
-  // Gửi Push Notification cho 1 bản ghi lỗi tới bác sĩ/nhân viên phụ trách
+  // Gửi Push Notification cho 1 bản ghi lỗi tới bác sĩ hoặc toàn bộ nhân viên khoa nếu chưa có người chỉ định
   sendPushNotification(recordId, isAuto = false, customReason = '') {
     if (storage.isTombstoned('records', recordId)) return { success: false, message: 'Hồ sơ đã bị xóa!' };
     const record = storage.getRecords().find(r => r.id === recordId);
@@ -234,8 +260,10 @@ class NotificationService {
     }
 
     const staffList = storage.getStaff();
-    const staff = staffList.find(s => s.name === record.nguoiChiDinh);
-    const { title, message, staffName, deptName } = this.formatPushContent(record, staff);
+    const hasSpecificDoctor = Boolean(record.nguoiChiDinh && String(record.nguoiChiDinh).trim() && record.nguoiChiDinh.trim() !== '---');
+    const staff = hasSpecificDoctor ? staffList.find(s => s.name === record.nguoiChiDinh.trim()) : null;
+    const deptStaff = this.getStaffInDepartment(record.khoaPhong);
+    const { title, message, staffName, deptName, isDeptBroadcast } = this.formatPushContent(record, staff);
 
     const now = new Date();
     const nowIso = now.toISOString();
@@ -256,6 +284,9 @@ class NotificationService {
       targetStaffId: staff ? staff.id : null,
       targetStaffName: staffName,
       targetDept: deptName,
+      isDeptBroadcast: isDeptBroadcast,
+      deptStaffNames: deptStaff.map(s => s.name),
+      deptStaffCount: deptStaff.length,
       mucDoCanhBao: record.mucDoCanhBao || 'Nhắc nhở',
       mucDoLoi: record.mucDoLoi || 'Nhắc nhở',
       title: title,
@@ -265,7 +296,9 @@ class NotificationService {
       timeFormatted: nowDisplayStr,
       isRead: false,
       isAuto: isAuto,
-      customReason: customReason || (isAuto ? 'Nhắc nhở tự động định kỳ' : 'Thông báo tức thời')
+      customReason: customReason || (isAuto 
+        ? (isDeptBroadcast ? 'Nhắc nhở tự động định kỳ (Toàn khoa)' : 'Nhắc nhở tự động định kỳ') 
+        : (isDeptBroadcast ? 'Thông báo cảnh báo toàn khoa' : 'Thông báo tức thời'))
     };
 
     // Lưu vào Inbox
@@ -297,6 +330,8 @@ class NotificationService {
       recipientName: staffName,
       targetDept: deptName,
       isAuto: isAuto,
+      isDeptBroadcast: isDeptBroadcast,
+      deptStaffCount: deptStaff.length,
       title: title,
       body: message
     });
@@ -319,6 +354,8 @@ class NotificationService {
       success: true,
       notification: notificationItem,
       recipientName: staffName,
+      isDeptBroadcast: isDeptBroadcast,
+      deptStaffCount: deptStaff.length,
       sentCount: updates.pushSentCount
     };
   }
@@ -407,22 +444,46 @@ class NotificationService {
   // Lấy thông tin người nhận
   getRecipientTarget(record) {
     const staffList = storage.getStaff();
-    const staff = staffList.find(s => s.name === record.nguoiChiDinh);
-    if (staff) {
+    const hasSpecificDoctor = Boolean(record.nguoiChiDinh && String(record.nguoiChiDinh).trim() && record.nguoiChiDinh.trim() !== '---');
+    
+    if (hasSpecificDoctor) {
+      const staff = staffList.find(s => s.name === record.nguoiChiDinh.trim());
+      if (staff) {
+        return {
+          label: staff.department ? `${staff.name} - ${staff.department}` : staff.name,
+          name: staff.name,
+          phone: staff.phone || '',
+          zaloId: staff.zaloId || '',
+          dept: staff.department || record.khoaPhong || '',
+          isDepartmentBroadcast: false,
+          deptStaff: [staff]
+        };
+      }
       return {
-        label: staff.department ? `${staff.name} - ${staff.department}` : staff.name,
-        name: staff.name,
-        phone: staff.phone || '',
-        zaloId: staff.zaloId || '',
-        dept: staff.department || record.khoaPhong || ''
+        label: `${record.nguoiChiDinh} (${record.khoaPhong || 'Khoa'})`,
+        name: record.nguoiChiDinh || '',
+        phone: '',
+        zaloId: '',
+        dept: record.khoaPhong || '',
+        isDepartmentBroadcast: false,
+        deptStaff: []
       };
     }
+
+    // Trường hợp không có người chỉ định cụ thể -> Nhắm mục tiêu tất cả nhân viên thuộc Khoa đó
+    const deptStaff = this.getStaffInDepartment(record.khoaPhong);
+    const deptName = record.khoaPhong || 'Khoa điều trị';
+    const staffNamesStr = deptStaff.length > 0 ? deptStaff.map(s => s.name).join(', ') : 'Chưa đăng ký nhân viên';
+
     return {
-      label: record.nguoiChiDinh ? `${record.nguoiChiDinh} (${record.khoaPhong || 'Khoa'})` : (record.khoaPhong || 'Toàn viện'),
-      name: record.nguoiChiDinh || '',
+      label: `Tất cả nhân viên Khoa ${deptName} (${deptStaff.length ? deptStaff.length + ' nhân sự: ' + staffNamesStr : 'Toàn khoa'})`,
+      name: `Tất cả nhân viên Khoa ${deptName}`,
       phone: '',
       zaloId: '',
-      dept: record.khoaPhong || ''
+      dept: deptName,
+      isDepartmentBroadcast: true,
+      deptStaff: deptStaff,
+      deptStaffCount: deptStaff.length
     };
   }
 
@@ -459,11 +520,23 @@ class NotificationService {
       }
 
       // Nếu là Bác sĩ điều trị / Khoa phòng (NHOM_2) hoặc Khoa Dược/Kế toán/IT:
-      // Lọc các thông báo gửi trực tiếp cho họ hoặc cho Khoa phòng của họ
+      // Lọc các thông báo gửi trực tiếp cho họ HOẶC gửi chung cho Khoa phòng của họ
       return list.filter(n => {
         const notifTargetName = (n.targetStaffName || n.recipientName || '').trim().toLowerCase();
         const notifTargetDept = (n.targetDept || n.khoaPhong || '').trim().toLowerCase();
-        return notifTargetName === userName || notifTargetDept === userDept || n.targetStaffId === user.id;
+        
+        // 1. Trực tiếp gửi theo ID hoặc tên nhân viên
+        if (n.targetStaffId && n.targetStaffId === user.id) return true;
+        if (userName && notifTargetName === userName) return true;
+
+        // 2. Gửi cho Khoa phòng (bao gồm cả trường hợp không có tên BS -> gửi cả Khoa)
+        if (userDept && notifTargetDept) {
+          if (userDept === notifTargetDept || userDept.includes(notifTargetDept) || notifTargetDept.includes(userDept)) {
+            return true;
+          }
+        }
+
+        return false;
       });
     } catch (e) {
       return [];
@@ -746,8 +819,8 @@ class NotificationService {
       const isResolved = record.trangThaiLoi === 'ĐÃ XONG' || record.trangThaiKiemDuyet === 'ĐÃ SỬA' || record.chotRaVien;
       if (isResolved) return;
 
-      // 2. Bỏ qua hồ sơ không có người chỉ định
-      if (!record.nguoiChiDinh) return;
+      // 2. Bỏ qua hồ sơ nếu không có cả người chỉ định lẫn khoa phòng
+      if (!record.nguoiChiDinh && !record.khoaPhong) return;
 
       let needSend = false;
 

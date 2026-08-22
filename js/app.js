@@ -354,7 +354,7 @@ class App {
           <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem;">
             <div style="display: flex; align-items: center; gap: 6px;">
               ${levelBadge}
-              <span style="color: var(--text-muted);">👤 ${escapeHtml(n.recipientName || 'BS')}</span>
+              <span style="color: var(--text-muted);">${n.isDeptBroadcast ? '🏢' : '👤'} ${escapeHtml(n.targetStaffName || n.recipientName || 'BS')}</span>
             </div>
             ${n.recordId ? '<span style="color: var(--color-primary); font-weight: 600;">Xem chi tiết ➔</span>' : ''}
           </div>

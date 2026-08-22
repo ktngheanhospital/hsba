@@ -463,12 +463,15 @@ export class ModalController {
         pushHistory: []
       });
 
-      if (nguoiChiDinh) {
-        const pushResult = notificationService.sendPushNotification(newRecord.id, true);
-        if (pushResult.success) {
-          showToast(`Đã thêm lỗi và bắn Push Notification cảnh báo tới ${nguoiChiDinh}! Nhắc lại sau mỗi 2 giờ.`, 'success', 5000);
+      // Tự động bắn Push Notification cảnh báo:
+      // - Nếu có người chỉ định cụ thể -> gửi trực tiếp cho người đó
+      // - Nếu không điền tên người chỉ định cụ thể -> gửi tới tất cả nhân viên thuộc Khoa đó
+      const pushResult = notificationService.sendPushNotification(newRecord.id, true);
+      if (pushResult && pushResult.success) {
+        if (nguoiChiDinh) {
+          showToast(`Đã thêm lỗi và bắn Push Notification cảnh báo tới ${nguoiChiDinh}! Nhắc lại định kỳ.`, 'success', 5000);
         } else {
-          showToast(`Đã thêm lỗi cho bệnh nhân ${tenBenhNhan}.`, 'success');
+          showToast(`Đã thêm lỗi và bắn Push Notification tới tất cả nhân viên thuộc Khoa ${khoaPhong || 'điều trị'}!`, 'success', 5000);
         }
       } else {
         showToast(`Đã thêm thành công lỗi cho bệnh nhân ${tenBenhNhan} (${maKCB})`, 'success');
@@ -1072,7 +1075,7 @@ export class ModalController {
     const html = `
       <div class="modal-header">
         <div class="modal-header-title">
-          <span class="modal-icon-badge">🔒</span>
+          <span class="modal-icon-badge">������</span>
           <div>
             <h3>Kiểm Lỗi Chuyên Môn & Chốt Thông Cổng</h3>
             <p class="modal-subtitle">BN: <strong>${escapeHtml(report.tenBenhNhan)}</strong> (Mã: <strong>${escapeHtml(report.maKCB)}</strong>) - Khoa: <strong>${escapeHtml(report.phong)}</strong></p>
@@ -1236,10 +1239,30 @@ export class ModalController {
     if (!record) return;
 
     const staffList = storage.getStaff();
-    const staff = staffList.find(s => s.name === record.nguoiChiDinh);
+    const hasSpecificDoctor = Boolean(record.nguoiChiDinh && String(record.nguoiChiDinh).trim() && record.nguoiChiDinh.trim() !== '---');
+    const staff = hasSpecificDoctor ? staffList.find(s => s.name === record.nguoiChiDinh.trim()) : null;
     const target = notificationService.getRecipientTarget(record);
     const message = notificationService.generatePushMessage(record, staff);
     const pushTitle = notificationService.generatePushTitle(record);
+
+    let recipientSubTitleHtml = '';
+    let broadcastAlertHtml = '';
+
+    if (hasSpecificDoctor) {
+      recipientSubTitleHtml = `Gửi cho: <strong>${escapeHtml(record.nguoiChiDinh)}</strong> (${escapeHtml(target.label)})`;
+    } else {
+      recipientSubTitleHtml = `Gửi cho: <strong style="color:#2563eb;">🏢 Tất cả nhân viên Khoa ${escapeHtml(record.khoaPhong || 'điều trị')}</strong>`;
+      const staffListNames = target.deptStaff && target.deptStaff.length > 0 
+        ? target.deptStaff.map(s => escapeHtml(s.name)).join(', ') 
+        : 'Chưa có danh sách nhân sự cụ thể trong danh bạ khoa';
+      broadcastAlertHtml = `
+        <div class="push-details-alert-box" style="margin-top: 10px; padding: 10px 14px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; color: #1e40af;">
+          <div class="text-xs">
+            📢 <strong>Thông báo toàn Khoa:</strong> Do hồ sơ chưa điền người chỉ định cụ thể, thông báo này sẽ được gửi tới <strong>tất cả nhân viên thuộc Khoa ${escapeHtml(record.khoaPhong || 'điều trị')}</strong> (${staffListNames}).
+          </div>
+        </div>
+      `;
+    }
 
     const html = `
       <div class="modal-header">
@@ -1247,7 +1270,7 @@ export class ModalController {
           <span class="modal-icon-badge" style="color: #4f46e5; background: #eef2ff;">🔔</span>
           <div>
             <h3>Bắn Thông Báo Đẩy (Push Notification) Cảnh Báo Lỗi</h3>
-            <p class="modal-subtitle">Gửi cho: <strong>${escapeHtml(record.nguoiChiDinh || '---')}</strong> (${escapeHtml(target.label)})</p>
+            <p class="modal-subtitle">${recipientSubTitleHtml}</p>
           </div>
         </div>
         <button class="btn-close-modal" id="btn-modal-close">&times;</button>
@@ -1262,11 +1285,13 @@ export class ModalController {
               <strong>HỆ THỐNG RÀ SOÁT HSBA</strong>
               <span class="push-preview-time">• Vừa xong</span>
             </div>
-            <span class="push-preview-badge">Web Push</span>
+            <span class="push-preview-badge">${hasSpecificDoctor ? 'Web Push Cá Nhân' : 'Web Push Toàn Khoa'}</span>
           </div>
           <div class="push-preview-title">${escapeHtml(pushTitle)}</div>
           <div class="push-preview-body">${escapeHtml(message).replace(/\n/g, '<br>')}</div>
         </div>
+
+        ${broadcastAlertHtml}
 
         <div class="push-details-alert-box" style="margin-top: 12px; padding: 10px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
           <div class="text-xs text-muted">
@@ -1300,7 +1325,7 @@ export class ModalController {
       btnSendNow.onclick = () => {
         const result = notificationService.sendPushNotification(record.id, false);
         if (result.success) {
-          showToast(`🔔 Đã bắn Thông Báo Đẩy cảnh báo tới ${record.nguoiChiDinh || 'nhân viên'}!`, 'success');
+          showToast(`🔔 Đã bắn Thông Báo Đẩy cảnh báo tới ${result.recipientName}!`, 'success');
           this.closeModal();
           this.app.refreshAllViews();
         } else {
