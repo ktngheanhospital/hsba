@@ -126,7 +126,7 @@ export class StorageService {
     try {
       const legacyMockStaffIds = ['NV00', 'NV01', 'NV02', 'NV03', 'NV04', 'NV08', 'NV09', 'NV10', 'NV11', 'NV13'];
 
-      // Chỉ lọc bỏ các tài khoản mockup cũ có tên 'Trần Thị Mai' hoặc ID rác NV00..
+      // 1. Chỉ lọc bỏ các tài khoản mockup cũ có tên 'Trần Thị Mai' hoặc ID rác NV00..
       const staffJson = localStorage.getItem(STORAGE_KEYS.STAFF);
       if (staffJson) {
         try {
@@ -135,6 +135,24 @@ export class StorageService {
             const cleaned = staff.filter(s => !legacyMockStaffIds.includes(s.id) && !(s.name && s.name.includes('Trần Thị Mai')));
             if (cleaned.length !== staff.length) {
               this.saveStaff(cleaned);
+            }
+          }
+        } catch (err) {}
+      }
+
+      // 2. Dọn dẹp bản ghi rác/test cũ nếu còn lưu trong localStorage của trình duyệt
+      const recordsJson = localStorage.getItem(STORAGE_KEYS.RECORDS);
+      if (recordsJson) {
+        try {
+          let records = JSON.parse(recordsJson);
+          if (Array.isArray(records)) {
+            const cleanedRecords = records.filter(r => {
+              if (r.id === 'REC-1006') return false;
+              if ((r.maKCB || '').trim().toLowerCase() === 'test' && (r.tenBenhNhan || '').toLowerCase().includes('adsfasdfasdf')) return false;
+              return true;
+            });
+            if (cleanedRecords.length !== records.length) {
+              this.saveRecords(cleanedRecords);
             }
           }
         } catch (err) {}
@@ -597,9 +615,11 @@ export class StorageService {
   }
 
   updateRecord(recordId, updateFields) {
+    if (!recordId || this.isTombstoned('records', recordId)) return false;
     const records = this.getRecords();
     const index = records.findIndex(r => r.id === recordId);
     if (index === -1) return false;
+    if (records[index].maKCB && this.isTombstoned('records', records[index].maKCB)) return false;
 
     const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
     records[index] = {
@@ -813,9 +833,11 @@ export class StorageService {
   }
 
   updateDischargeReport(reportId, updateFields) {
+    if (!reportId || this.isTombstoned('discharge', reportId)) return false;
     const reports = this.getDischargeReports();
     const index = reports.findIndex(r => r.id === reportId);
     if (index === -1) return false;
+    if (reports[index].maKCB && this.isTombstoned('discharge', reports[index].maKCB)) return false;
 
     reports[index] = {
       ...reports[index],
