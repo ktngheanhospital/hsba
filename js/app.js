@@ -1525,6 +1525,7 @@ class App {
   }
 
   renderDischargeView() {
+    storage.syncDischargeReportsKetoan();
     const reports = this.getFilteredDischargeReports();
     const canChot = storage.canChotThongCong();
 

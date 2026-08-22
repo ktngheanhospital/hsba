@@ -69,7 +69,7 @@ class SupabaseService {
   }
 
   // Phương thức Upsert thông minh: tự động phát hiện và loại bỏ các cột không tồn tại trên Cloud, tự chuyển đổi JSON sang TEXT nếu cần
-  async robustUpsert(tableName, data, maxRetries = 6) {
+  async robustUpsert(tableName, data, maxRetries = 8) {
     if (!this.client || !data) return false;
 
     let payload;
@@ -85,19 +85,22 @@ class SupabaseService {
         const { error } = await this.client.from(tableName).upsert(payload);
         if (!error) return true;
 
-        const errMsg = error.message || error.details || error.hint || '';
+        const errMsg = [error.message, error.details, error.hint, error.description].filter(Boolean).join(' ');
 
         // 1. Kiểm tra lỗi schema: Cột không tồn tại trên Postgres Cloud
-        const colMatch = errMsg.match(/Could not find the '([^']+)' column of '([^']+)' in the schema cache/i)
-                      || errMsg.match(/column "?([^"'\s]+)"? of relation "?([^"'\s]+)"? does not exist/i)
-                      || errMsg.match(/column '([^']+)' does not exist/i);
+        const colMatch = errMsg.match(/Could not find the '([^']+)' column/i)
+                      || errMsg.match(/Could not find the "([^"]+)" column/i)
+                      || errMsg.match(/column "?([^"'\s,.]+)"? of relation/i)
+                      || errMsg.match(/column "?([^"'\s,.]+)"? does not exist/i)
+                      || errMsg.match(/column '([^']+)' does not exist/i)
+                      || errMsg.match(/relation "([^"]+)" does not exist/i);
 
         if (colMatch && colMatch[1]) {
           const missingCol = colMatch[1];
           this.addMissingColumnForTable(tableName, missingCol);
           if (Array.isArray(payload)) {
-            payload.forEach(r => delete r[missingCol]);
-          } else {
+            payload.forEach(r => { if (r && typeof r === 'object') delete r[missingCol]; });
+          } else if (payload && typeof payload === 'object') {
             delete payload[missingCol];
           }
           continue; // Thử lại ngay lập tức mà không có cột này
@@ -125,10 +128,10 @@ class SupabaseService {
           continue; // Thử lại sau khi stringify JSON
         }
 
-        console.warn(`Supabase upsert vào bảng '${tableName}' gặp cảnh báo (lần thử ${attempt + 1}):`, errMsg);
+        console.warn(`[Supabase Notice] Không thể upsert vào bảng '${tableName}' (lần ${attempt + 1}):`, errMsg);
         return false;
       } catch (e) {
-        console.warn(`Lỗi ngoại lệ khi upsert vào bảng '${tableName}':`, e);
+        console.warn(`[Supabase Notice] Ngoại lệ khi upsert vào bảng '${tableName}':`, e);
         return false;
       }
     }

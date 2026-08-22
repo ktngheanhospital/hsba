@@ -188,6 +188,7 @@ export class StorageService {
           records.unshift(record);
         }
         this.saveRecords(records);
+        this.syncDischargeReportsKetoan(record.maKCB);
       } else if (payload.eventType === 'DELETE') {
         const oldId = payload.old ? payload.old.id : null;
         const oldKcb = payload.old ? payload.old.ma_kcb : null;
@@ -200,6 +201,7 @@ export class StorageService {
           return true;
         });
         this.saveRecords(records);
+        if (oldKcb) this.syncDischargeReportsKetoan(oldKcb);
       }
     } else if (table === 'discharge_reports') {
       if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
@@ -718,27 +720,55 @@ export class StorageService {
   }
 
   // Tự động kiểm tra trạng thái KT-BH từ Danh sách lỗi dựa theo mã KCB:
-  // Nếu "Mức độ lỗi" là "Không có lỗi" -> "Đã kiểm, không lỗi" (KHONG_LOI), ngược lại -> "Có lỗi" (CO_LOI)
+  // - Nếu bệnh nhân không có lỗi trong DS rà soát -> "Đã kiểm, không lỗi" (KHONG_LOI)
+  // - Nếu tất cả các lỗi rà soát của mã KCB đã được sửa (trangThaiLoi = "ĐÃ XONG", "ĐÃ SỬA", "HỦY CHUYỂN VIỆN" hoặc mucDoLoi = "Không có lỗi" hoặc trangThaiKiemDuyet = "ĐÃ SỬA" hoặc chotRaVien = true) -> "Đã kiểm, không lỗi" (KHONG_LOI)
+  // - Nếu vẫn còn lỗi chưa sửa (CHƯA SỬA, ĐÃ XEM - ĐANG SỬA...) -> "Có lỗi" (CO_LOI) kèm trích xuất nội dung lỗi
   evaluateKetoanStatusFromRecords(maKCB) {
     if (!maKCB) return { status: 'CO_LOI', note: '' };
-    const key = maKCB.trim().toLowerCase();
+    const key = String(maKCB).trim().toLowerCase();
     const records = this.getRecords();
-    const matched = records.filter(r => (r.maKCB || '').trim().toLowerCase() === key);
+    const matched = records.filter(r => (r.maKCB || '').toString().trim().toLowerCase() === key);
+    
+    // Nếu bệnh nhân không có bất kỳ bản ghi lỗi nào trong danh sách rà soát lỗi HSBA -> Không có lỗi rà soát
     if (matched.length === 0) {
-      return { status: 'CO_LOI', note: '' };
+      return { status: 'KHONG_LOI', note: 'Không có lỗi rà soát HSBA' };
     }
 
-    // Kiểm tra xem các bản ghi rà soát có lỗi hay không
-    const errorRecords = matched.filter(r => {
-      const lvl = (r.mucDoLoi || r.mucDoCanhBao || '').trim();
-      return lvl !== 'Không có lỗi' && lvl !== 'KHONG_CO_LOI' && lvl !== 'KHÔNG CÓ LỖI';
-    });
+    // Helper kiểm tra xem 1 bản ghi lỗi đã được xử lý xong / không còn lỗi hay chưa
+    const isResolved = (r) => {
+      if (!r) return true;
 
-    if (errorRecords.length === 0) {
-      return { status: 'KHONG_LOI', note: 'Rà soát: Không có lỗi' };
+      // 1. Mức độ lỗi là không có lỗi
+      const lvl = String(r.mucDoLoi || r.mucDoCanhBao || '').trim().toLowerCase();
+      if (lvl.includes('không có lỗi') || lvl.includes('khong co loi') || lvl === 'khong_co_loi') return true;
+
+      // 2. Đã chốt ra viện
+      if (r.chotRaVien === true || r.chotRaVien === 'CO' || r.chotRaVien === 'true') return true;
+
+      // 3. Trạng thái kiểm duyệt là đã sửa
+      const kDuyet = String(r.trangThaiKiemDuyet || '').trim().toLowerCase();
+      if (kDuyet === 'đã sửa' || kDuyet === 'da sua' || kDuyet === 'đã duyệt' || kDuyet === 'da duyet' || kDuyet.includes('không có lỗi') || kDuyet.includes('khong co loi')) return true;
+
+      // 4. Trạng thái lỗi (Tiến độ khắc phục: ĐÃ XONG / ĐÃ SỬA / HỦY CHUYỂN VIỆN)
+      const st = String(r.trangThaiLoi || r.trang_thai_loi || '').trim().toUpperCase();
+      if (st.includes('ĐÃ XONG') || st.includes('DA XONG') || st.includes('ĐÃ SỬA') || st.includes('DA SUA') || st.includes('HỦY CHUYỂN VIỆN') || st.includes('HUY CHUYEN VIEN')) {
+        return true;
+      }
+
+      return false;
+    };
+
+    // Lọc ra các bản ghi còn lỗi (chưa xử lý xong)
+    const unresolvedRecords = matched.filter(r => !isResolved(r));
+
+    if (unresolvedRecords.length === 0) {
+      return { status: 'KHONG_LOI', note: 'Rà soát: Đã sửa xong lỗi (ĐÃ XONG)' };
     } else {
-      const notes = errorRecords.map(r => r.dienGiaiLoi || r.mucDoLoi).filter(Boolean).join('; ');
-      return { status: 'CO_LOI', note: notes || 'Có lỗi rà soát' };
+      const notes = unresolvedRecords
+        .map(r => r.dienGiaiLoi || r.mucDoLoi || r.trangThaiLoi)
+        .filter(Boolean)
+        .join('; ');
+      return { status: 'CO_LOI', note: notes || 'Có lỗi rà soát chưa khắc phục' };
     }
   }
 
@@ -749,21 +779,20 @@ export class StorageService {
 
     reports.forEach(rep => {
       if (!rep.maKCB) return;
-      if (!targetMaKCB || (rep.maKCB.trim().toLowerCase() === targetMaKCB.trim().toLowerCase())) {
+      const repKey = String(rep.maKCB).trim().toLowerCase();
+      if (!targetMaKCB || (repKey === String(targetMaKCB).trim().toLowerCase())) {
         const calculated = this.evaluateKetoanStatusFromRecords(rep.maKCB);
-        const records = this.getRecords();
-        const hasMatchedRecord = records.some(r => (r.maKCB || '').trim().toLowerCase() === rep.maKCB.trim().toLowerCase());
-        if (hasMatchedRecord) {
-          if (!rep.kiemKeToanBH || rep.kiemKeToanBH.status !== calculated.status || rep.kiemKeToanBH.note !== calculated.note) {
-            rep.kiemKeToanBH = calculated;
-            changed = true;
-          }
+        if (!rep.kiemKeToanBH || rep.kiemKeToanBH.status !== calculated.status || rep.kiemKeToanBH.note !== calculated.note) {
+          rep.kiemKeToanBH = calculated;
+          changed = true;
+          supabaseService.upsertDischargeReport(rep);
         }
       }
     });
 
     if (changed) {
       this.saveDischargeReports(reports);
+      this.notifyTabs();
     }
   }
 
